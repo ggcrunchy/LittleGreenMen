@@ -140,12 +140,12 @@ do
 				iy, y1 = iy + 1, y1 - 1
 			end
 		]]
-		local xi = rshift(floor(y0 - x0), 31) -- x0 >= y0
+		local xi = rshift(floor(y0 - x0), 31) -- y0 < x0
 		local n1 = GetN(ix + xi, iy + (1 - xi), x0 + 0.211324865 - xi, y0 - 0.788675135 + xi) -- x0 + G - xi, y0 + G - (1 - xi)
 
 		-- Add contributions from each corner to get the final noise value.
 		-- The result is scaled to return values in the interval [-1,1].
-		return 83.373 * (n0 + n1 + n2)
+		return 70.1480580019 * (n0 + n1 + n2)
 	end
 --[[
 	-- Timing test, 2D case
@@ -232,48 +232,44 @@ do
 
 		--[[
 			Determine other corners based on simplex (skewed tetrahedron) we are in:
-			local ix2, iy2, iz2 = ix, iy, iz
 
-			if x0 >= y0 then
-				ix2, x2 = ix + 1, x2 - 1
-
-				if y0 >= z0 then -- X Y Z
-					ix, iy2, x1, y2 = ix + 1, iy + 1, x1 - 1, y2 - 1
-				elseif x0 >= z0 then -- X Z Y
-					ix, iz2, x1, z2 = ix + 1, iz + 1, x1 - 1, z2 - 1
-				else -- Z X Y
-					iz, iz2, z1, z2 = iz + 1, iz + 1, z1 - 1, z2 - 1
+			if x0 >= y0 then -- ~A
+				if y0 >= z0 then -- ~A and ~B
+					i1, j1, k1, i2, j2, k2 = 1, 0, 0, 1, 1, 0
+				elseif x0 >= z0 then -- ~A and B and ~C
+					i1, j1, k1, i2, j2, k2 = 1, 0, 0, 1, 0, 1
+				else -- ~A and B and C
+					i1, j1, k1, i2, j2, k2 = 0, 0, 1, 1, 0, 1
 				end
-			else
-				iy2, y2 = iy + 1, y2 - 1
-
-				if y0 < z0 then -- Z Y X
-					iz, iz2, z1, z2 = iz + 1, iz + 1, z1 - 1, z2 - 1
-				elseif x0 < z0 then -- Y Z X
-					iy, iz2, y1, z2 = iy + 1, iz + 1, y1 - 1, z2 - 1
-				else -- Y X Z
-					iy, ix2, y1, x2 = iy + 1, ix + 1, y1 - 1, x2 - 1
+			else -- A
+				if y0 < z0 then -- A and B
+					i1, j1, k1, i2, j2, k2 = 0, 0, 1, 0, 1, 1
+				elseif x0 < z0 then -- A and ~B and C
+					i1, j1, k1, i2, j2, k2 = 0, 1, 0, 0, 1, 1
+				else -- A and ~B and ~C
+					i1, j1, k1, i2, j2, k2 = 0, 1, 0, 1, 1, 0
 				end
-			end		
+			end
 		]]
-		local yx = rshift(floor(y0 - x0), 31) -- x0 >= y0
-		local zy = rshift(floor(z0 - y0), 31) -- y0 >= z0
-		local zx = rshift(floor(z0 - x0), 31) -- x0 >= z0
 
-		local i1 = band(yx, bor(zy, zx)) -- x >= y and (y >= z or x >= z)
-		local j1 = band(1 - yx, zy) -- x < y and y >= z
-		local k1 = band(1 - zy, 1 - band(yx, zx)) -- y < z and not (x >= y and x >= z)
+		local xLy = rshift(floor(x0 - y0), 31) -- x0 < y0
+		local yLz = rshift(floor(y0 - z0), 31) -- y0 < z0
+		local xLz = rshift(floor(x0 - z0), 31) -- x0 < z0
 
-		local i2 = bor(yx, band(zy, zx)) -- x >= z or (y >= z and x >= z)
-		local j2 = bor(1 - yx, zy) -- x < y or y >= z
-		local k2 = bxor(yx, zy) -- (x >= y and y < z) xor (x < y and y >= z)
+		local i1 = band(1 - xLy, bor(1 - yLz, 1 - xLz)) -- x0 >= y0 and (y0 >= z0 or x0 >= z0)
+		local j1 = band(xLy, 1 - yLz) -- x0 < y0 and y0 >= z0
+		local k1 = band(yLz, bor(xLy, xLz)) -- y0 < z0 and (x0 < y0 or x0 < z0)
+
+		local i2 = bor(1 - xLy, band(1 - yLz, 1 - xLz)) -- x0 >= y0 or (y0 >= z0 and x0 >= z0)
+		local j2 = bor(xLy, 1 - yLz) -- x0 < y0 or y0 >= z0
+		local k2 = bor(band(1 - xLy, yLz), band(xLy, bor(yLz, xLz))) -- (x0 >= y0 and y0 < z0) or (x0 < y0 and (y0 < z0 or x0 < z0))
 
 		local n1 = GetN(ix + i1, iy + j1, iz + k1, x0 + 0.166666667 - i1, y0 + 0.166666667 - j1, z0 + 0.166666667 - k1) -- G
 		local n2 = GetN(ix + i2, iy + j2, iz + k2, x0 + 0.333333333 - i2, y0 + 0.333333333 - j2, z0 + 0.333333333 - k2) -- G2
 
 		-- Add contributions from each corner to get the final noise value.
 		-- The result is scaled to stay just inside [-1,1]
-		return 33.542 * (n0 + n1 + n2 + n3)
+		return 28.452842 * (n0 + n1 + n2 + n3)
 	end
 --[[
 	-- Timing test, 3D case
@@ -436,7 +432,7 @@ do
 		local n3 = GetN(ix + i3, iy + j3, iz + k3, iw + l3, x0 + 0.414589803 - i3, y0 + 0.414589803 - j3, z0 + 0.414589803 - k3, w0 + 0.414589803 - l3) -- G3
 		local n4 = GetN(ix + 1, iy + 1, iz + 1, iw + 1, x0 - 0.447213595, y0 - 0.447213595, z0 - 0.447213595, w0 - 0.447213595) -- G4
 
-		return 40.654 * (n0 + n1 + n2 + n3 + n4)
+		return 2.210600293 * (n0 + n1 + n2 + n3 + n4)
 	end
 
 --[[
@@ -524,6 +520,84 @@ if F then
 	F:close()
 end
 --]=]
+---[[
+local mabs, mmin, mmax = math.abs, math.min, math.max
+local fmin, fmax = 10000, -10000
+local S = M.Simplex4D
+local n, ng1, ng10, ng20, ng50 = 0, 0, 0, 0, 0
+local _100, _200 = {}, {}
+for di = 0, .95, .05 do
+	for dj = 0, .95, .05 do
+		for dk = 0, .95, .05 do
+			for dl = 0, .95, .05 do
+
+				for i = -5, 5 do
+					for j = -5, 5 do
+						for k = -5, 5 do
+							for l = -5, 5 do
+								local f = S(i + di, j + dj, k + dk, l + dl)
+								fmin = mmin(fmin, f)
+								fmax = mmax(fmax, f)
+		---[=[
+								n = n + 1
+								local af = mabs(f)
+								if af > 1 then
+									if af < 10 then
+										ng1 = ng1 + 1
+									elseif af < 20 then
+										ng10 = ng10 + 1
+									elseif af < 50 then
+										ng20 = ng20 + 1
+									elseif af < 100 then
+										ng50 = ng50 + 1
+									elseif af < 200 then
+										local n = _100[di * 20] or 0
+										
+										_100[di * 20] = n + 1
+									else
+										local n = _200[di * 20] or 0
+										
+										_200[di * 20] = n + 1
+									end
+								end
+		--]=]
+							end
+						end
+					end
+				end
+				
+			end
+		end
+	end
+end
+
+print("bounds", fmin, fmax)
+print("% > 1", ng1 / n)
+print("% > 10", ng10 / n)
+print("% > 20", ng20 / n)
+print("% > 50", ng50 / n)
+
+print("")
+print("NEIGHBORHOODS of > 100")
+
+for i, v in pairs(_100) do
+	print("100's Bin", i / 20, v, v / n)
+end
+
+print("")
+print("NEIGHBORHOODS of > 200")
+
+for i, v in pairs(_200) do
+	print("200's Bin", i / 20, v, v / n)
+end
+--]]
+-- (-7, 3, 15), (.2, .2, .15)
+--print(M.Simplex3D(-7 + .2, 3 + .2, 15 + .15))
+--print(N0, N1, N2, N3)
+
+
+
+
 
 -- Export the module.
 return M
