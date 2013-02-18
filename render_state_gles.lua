@@ -20,8 +20,6 @@ local function NewMatrix ()
 
 	xforms.MatrixLoadIdentity(mat.matrix)
 
-	mat.counter = 1;
-
 	return mat
 end
 

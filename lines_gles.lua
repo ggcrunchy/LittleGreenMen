@@ -104,27 +104,21 @@ function DrawBatch ()
 end
 
 --
-local function GetColor (color, def)
+local function GetColor (color)
 	if ffi.istype(Float4, color) then
 		return color
 	end
 
-	local out = def
+	local out = Float4{1}
 
-	if ffi.istype(Float3, color) or type(color) == "table" then
-		out = Float4{1}
+	if ffi.istype(Float3, color) then
+		ffi.copy(out, color, ffi.sizeof(Float3))
+	else
+		assert(type(color) == "table" and #color == 3 or #color == 4, "Invalid color array")
 
-		if ffi.istype(Float3, color) then
-			ffi.copy(out, color, ffi.sizeof(Float3))
-		else
-			assert(#color == 3 or #color == 4, "Invalid color array")
-
-			for i = 1, #color do
-				out[i - 1] = color[i]
-			end
+		for i = 1, #color do
+			out[i - 1] = color[i]
 		end
-	elseif def == nil then
-		out = Float4{1}
 	end
 
 	return out
@@ -147,10 +141,17 @@ function M.Draw (x1, y1, z1, x2, y2, z2, color1, color2)
 	Pos[N * 2 + 1] = Float3(x2, y2, z2)
 
 	--
-	local cref = GetColor(color1)
+	if color1 ~= nil then
+		Color[N * 2 + 0] = GetColor(color1)
+	else
+		Color[N * 2 + 0] = Float4{1}
+	end
 
-	Color[N * 2 + 0] = cref
-	Color[N * 2 + 1] = GetColor(color2, cref)
+	if color2 ~= nil then
+		Color[N * 2 + 1] = GetColor(color2)
+	else
+		Color[N * 2 + 1] = Color[N * 2 + 0]
+	end
 
 	--
 	N = N + 1

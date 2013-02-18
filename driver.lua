@@ -72,35 +72,35 @@ local function DrawLogoCursor (x, y)
 end
 
 local color = ffi.new("GLfloat[960]", {
-	1.0,  1.0,  0.0, 1.0,  -- 0
-	1.0,  0.0,  0.0,  1.0, -- 1
-	0.0,  1.0,  0.0, 1.0,  -- 3
-	0.0,  0.0,  0.0,  1.0, -- 2
+	1.0, 1.0, 0.0, 1.0,  -- 0
+	1.0, 0.0, 0.0, 1.0, -- 1
+	0.0, 1.0, 0.0, 1.0,  -- 3
+	0.0, 0.0, 0.0, 1.0, -- 2
 
-	0.0,  1.0,  0.0, 1.0,  -- 3
-	0.0,  1.0,  1.0,  1.0, -- 4
-	0.0,  0.0,  0.0, 1.0,  -- 2
-	0.0,  0.0,  1.0, 1.0,  -- 7
+	0.0, 1.0, 0.0, 1.0,  -- 3
+	0.0, 1.0, 1.0, 1.0, -- 4
+	0.0, 0.0, 0.0, 1.0,  -- 2
+	0.0, 0.0, 1.0, 1.0,  -- 7
 
-	1.0,  1.0,  0.0, 1.0,  -- 0
-	1.0,  1.0,  1.0, 1.0,  -- 5
-	1.0,  0.0,  0.0, 1.0,  -- 1
-	1.0,  0.0,  1.0, 1.0,  -- 6
+	1.0, 1.0, 0.0, 1.0,  -- 0
+	1.0, 1.0, 1.0, 1.0,  -- 5
+	1.0, 0.0, 0.0, 1.0,  -- 1
+	1.0, 0.0, 1.0, 1.0,  -- 6
 
-	1.0,  1.0,  1.0, 1.0,  -- 5
-	0.0,  1.0,  1.0, 1.0,  -- 4
-	1.0,  0.0,  1.0, 1.0,  -- 6
-	0.0,  0.0,  1.0, 1.0,  -- 7
+	1.0, 1.0, 1.0, 1.0,  -- 5
+	0.0, 1.0, 1.0, 1.0,  -- 4
+	1.0, 0.0, 1.0, 1.0,  -- 6
+	0.0, 0.0, 1.0, 1.0,  -- 7
 
-	1.0,  1.0,  1.0, 1.0,  -- 5
-	1.0,  1.0,  0.0, 1.0,  -- 0
-	0.0,  1.0,  1.0, 1.0,  -- 4
-	0.0,  1.0,  0.0, 1.0,  -- 3
+	1.0, 1.0, 1.0, 1.0,  -- 5
+	1.0, 1.0, 0.0, 1.0,  -- 0
+	0.0, 1.0, 1.0, 1.0,  -- 4
+	0.0, 1.0, 0.0, 1.0,  -- 3
 
-	1.0,  0.0,  1.0, 1.0,  -- 6
-	1.0,  0.0,  0.0, 1.0,  -- 1
-	0.0,  0.0,  1.0, 1.0,  -- 7
-	0.0,  0.0,  0.0, 1.0,  -- 2
+	1.0, 0.0, 1.0, 1.0,  -- 6
+	1.0, 0.0, 0.0, 1.0,  -- 1
+	0.0, 0.0, 1.0, 1.0,  -- 7
+	0.0, 0.0, 0.0, 1.0,  -- 2
 })
 for i = 1, 9 do
 	for j = 0, 95 do
@@ -190,6 +190,23 @@ local function CalcMove (a, b, n)
 	return move * Diff
 end
 
+local PX, PY, PZ = -.75, 0, 1.5
+local P = ffi.new("double[3]", PX - .1, PY, PZ)
+local Q = ffi.new("double[3]", PX + .1, PY, PZ)
+local UsingP = true
+
+local function Corner (x, y, z, ext)
+	local xmin, ymin, zmin = x - ext, y - ext, z - ext
+	local xmax, ymax, zmax = x + ext, y + ext, z + ext
+
+	return xmin, ymin, zmin, xmax, ymax, zmax
+end
+
+local rs = require("ray_slopes")
+
+local Box = rs.MakeAABox(Corner(PX, PY, PZ, .1))
+local HitColor, BoxColor = { 0, 1, 0 }
+
 function KeyHandler (key, is_down)
 	local sym = key.keysym.sym
 
@@ -197,6 +214,42 @@ function KeyHandler (key, is_down)
 		keys.left = is_down
 	elseif sym == sdl.SDLK_RIGHT then
 		keys.right = is_down
+	end
+
+	if is_down then
+		local pt = UsingP and P or Q
+
+		if sym == sdl.SDLK_a then
+			pt[0] = pt[0] - .1
+		elseif sym == sdl.SDLK_d then
+			pt[0] = pt[0] + .1
+		elseif sym == sdl.SDLK_w then
+			pt[1] = pt[1] - .1
+		elseif sym == sdl.SDLK_s then
+			pt[1] = pt[1] + .1
+		elseif sym == sdl.SDLK_j then
+			pt[2] = pt[2] - .1
+		elseif sym == sdl.SDLK_k then
+			pt[2] = pt[2] + .1
+		elseif sym == sdl.SDLK_SPACE then
+			UsingP = not UsingP
+		else
+			return
+		end
+
+		if sym ~= sdl.SDLK_SPACE then
+			local dx, dy, dz = Q[0] - P[0], Q[1] - P[1], Q[2] - P[2]
+			local len = math.sqrt(dx * dx + dy * dy + dz * dz)
+			local ray = rs.MakeRay(P[0], P[1], P[2], dx / len, dy / len, dz / len)
+
+			local hit, when =  rs.SlopeInt(ray, Box)
+			if hit then
+			print("HIT AT", when)
+				BoxColor = HitColor
+			else
+				BoxColor = nil
+			end
+		end
 	end
 end
 
@@ -232,18 +285,30 @@ local CUBE = shapes.GenCube(1)
 
 local lines = require("lines_gles")
 
-local function XYZ (pos, target, t)
-	local s = 1 - t
-	local x = s * pos[0] + t * target[0]
-	local y = s * pos[1] + t * target[1]
-	local z = s * (pos[2] + 800) + t * target[2]
-	return x, y, z
-end
-
 local function Quit ()
 	if cursor_texture[0] ~= 0 then
 		gl.glDeleteTextures(1, cursor_texture)
 	end
+end
+
+local function DrawBoxAt (x, y, z, ext, color)
+	local xmin, ymin, zmin, xmax, ymax, zmax = Corner(x, y, z, ext)
+
+	lines.Draw(xmin, ymin, zmin, xmax, ymin, zmin, color)
+	lines.Draw(xmin, ymax, zmin, xmax, ymax, zmin, color)
+	lines.Draw(xmin, ymin, zmax, xmax, ymin, zmax, color)
+
+	lines.Draw(xmin, ymin, zmin, xmin, ymax, zmin, color)	
+	lines.Draw(xmax, ymin, zmin, xmax, ymax, zmin, color)
+	lines.Draw(xmin, ymin, zmax, xmin, ymax, zmax, color)
+
+	lines.Draw(xmin, ymin, zmin, xmin, ymin, zmax, color)
+	lines.Draw(xmax, ymin, zmin, xmax, ymin, zmax, color)
+	lines.Draw(xmin, ymax, zmin, xmin, ymax, zmax, color)
+
+	lines.Draw(xmax, ymax, zmax, xmin, ymax, zmax, color)
+	lines.Draw(xmax, ymax, zmax, xmax, ymin, zmax, color)
+	lines.Draw(xmax, ymax, zmax, xmax, ymax, zmin, color)
 end
 
 local function Test ()
@@ -279,7 +344,22 @@ local function Test ()
 	SP:DrawElements(gl.GL_TRIANGLES, CUBE.indices, CUBE.num_indices)
 
 	DrawLogoCursor(100 + x, 100)
-lines.Draw(pos[0] + 200, pos[1], pos[2] + 100, target[0], target[1], target[2], {0,1,0}, {1,0,0})
+--lines.Draw(pos[0] + 200, pos[1], pos[2] + 100, target[0], target[1], target[2], {0,1,0}, {1,0,0})
+--[[
+local N, D = 1, .25
+for i = -N, N, D do
+	for j = -N, N, D do
+		lines.Draw(-N, i, j, N, i, j)
+		lines.Draw(i, -N, j, i, N, j)
+		lines.Draw(i, j, -N, i, j, N)
+	end
+end
+lines.Draw(-.75, 0, 1.5, -.75, .25, 1.5, {0, 0, 1})
+lines.Draw(.75, 0, 1.5, .75, -.25, 1.5, {0, 1, 0})
+]]
+DrawBoxAt(P[0], P[1], P[2], .025, { 0, 0, 1 })
+DrawBoxAt(PX, PY, PZ, .1, BoxColor)
+lines.Draw(P[0], P[1], P[2], Q[0], Q[1], Q[2], { 0, 1, 0 })
 	if x > 200 then
 		dx = -1
 	elseif x < -200 then
