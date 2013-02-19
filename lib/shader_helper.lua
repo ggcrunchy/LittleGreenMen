@@ -98,12 +98,12 @@ end
 
 --- DOCME
 function ShaderMT:Disable ()
-	if self._alocs == BoundLocs then
-		Disable()
-	end
-
 	if self._program == Program then
 		StopUsing()
+	end
+
+	if self._alocs == BoundLocs then
+		Disable()
 	end
 end
 
@@ -169,8 +169,8 @@ end
 
 --- DOCME
 function M.Finish ()
-	Disable()
 	StopUsing()
+	Disable()
 end
 
 -- --

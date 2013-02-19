@@ -46,6 +46,7 @@
 
 -- Standard library imports --
 local max = math.max
+local sqrt = math.sqrt
 
 -- Modules --
 local ffi = require("ffi")
@@ -202,6 +203,21 @@ function M.MakeRay (x, y, z, i, j, k)
 	end
 
 	return ray
+end
+
+--- DOCME
+-- @number x1
+-- @number y1
+-- @number z1
+-- @number x2
+-- @number y2
+-- @number z2
+-- @treturn Ray_t X
+function M.MakeRayTo (x1, y1, z1, x2, y2, z2)
+	local dx, dy, dz = x2 - x1, y2 - y1, z2 - z1
+	local len = sqrt(dx * dx + dy * dy + dz * dz)
+
+	return M.MakeRay(x1, y1, z1, dx / len, dy / len, dz / len)
 end
 
 --- DOCME
