@@ -34,6 +34,7 @@ local min = math.min
 -- Modules --
 local ffi = require("ffi")
 local bit = require("bit")
+local utils = require("utils")
 local v3math = require("lib.v3math")
 
 -- Imports --
@@ -491,23 +492,15 @@ end
 ]]
 
 
-local function Swap (a, b)
-	if a <= b then
-		return a, b
-	else
-		return b, a
-	end
-end
-
 local function STUFF ()
 	-- Make a "world" cube that encloses all the sub-beams.
 	local EXTRA = v3math(1,1,1)*(Radius + .001)
 	local P = pos + BeginAt * dir
 	local Q = P + max_range * dir
 
-	P.x, Q.x = Swap(P.x, Q.x)
-	P.y, Q.y = Swap(P.y, Q.y)
-	P.z, Q.z = Swap(P.z, Q.z)
+	P.x, Q.x = utils.Sort2(P.x, Q.x)
+	P.y, Q.y = utils.Sort2(P.y, Q.y)
+	P.z, Q.z = utils.Sort2(P.z, Q.z)
 
 	local WORLD = Bounds(P - EXTRA, Q + EXTRA)
 

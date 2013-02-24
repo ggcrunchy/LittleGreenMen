@@ -34,12 +34,12 @@ local render_state = require("render_state_gles")
 local shader_helper = require("lib.shader_helper")
 --local xforms = require("transforms_gles")
 
--- Imports --
-local Float3 = ffi.typeof("float[3]")
-local Float4 = ffi.typeof("float[4]")
-
 -- Exports --
 local M = {}
+
+-- Types --
+local Float3 = ffi.typeof("float[3]")
+local Float4 = ffi.typeof("float[4]")
 
 -- --
 local ShaderParams = {}
@@ -55,32 +55,26 @@ function ShaderParams:on_draw ()
 end
 
 -- --
---local PrevPos = Float3() -- In case we want an "append"...
-
--- --
---local PrevColor = Float4()
-
--- --
-local N, DrawBatch = 0
+local N, First, DrawBatch = 0, true
 
 --
 function ShaderParams.on_done ()
 	if N > 0 then
 		DrawBatch()
 	end
-
-	-- Invalidate prev?
 end
 
 -- --
 local MaxN = 16
 
 -- --
-local Pos, LocPos = ffi.new("float[?][3]", MaxN * 2)
-local Color, LocColor = ffi.new("float[?][4]", MaxN * 2)
+local Pos, LocPos = ffi.typeof("$[?]", Float3)(MaxN * 2)
+local Color, LocColor = ffi.typeof("$[?]", Float4)(MaxN * 2)
 
 --
 function ShaderParams:on_use ()
+	gl.glEnable(gl.GL_DEPTH_TEST)
+
 	self:BindAttributeStream(LocPos, Pos, 3)
 	self:BindAttributeStream(LocColor, Color, 4)
 end
@@ -123,7 +117,6 @@ local SP = shader_helper.NewShader(ShaderParams)
 
 function DrawBatch ()
 	SP:DrawArrays(gl.GL_LINES, N * 2)
-	-- Prev = Batch[N]?
 
 	N = 0
 end
@@ -179,11 +172,30 @@ function M.Draw (x1, y1, z1, x2, y2, z2, color1, color2)
 	end
 
 	--
-	N = N + 1
+	N, First = N + 1
 
 	if N == MaxN then
 		DrawBatch()
 	end
+end
+
+--- DOCME
+-- @number x
+-- @number y
+-- @number z
+-- @ptable color
+function M.DrawTo (x, y, z, color)
+	local prev_pos, prev_color
+
+	if not First then
+		local index = (N > 0 and N or MaxN) * 2 - 1
+
+		prev_pos, prev_color = Pos[index], Color[index]
+	else
+		prev_pos, prev_color = Float3(), Float4{1}
+	end
+
+	M.Draw(prev_pos[0], prev_pos[1], prev_pos[2], x, y, z, prev_color, color)
 end
 
 -- Export the module.

@@ -93,7 +93,7 @@ local function DrawLogoCursor (x, y)
 		end
 	end
 
-	textures.Draw(cursor_texture[0], x, y, iw, ih, minx, miny, maxx, maxy, DDD)
+	textures.Draw(cursor_texture[0], x, y, iw, ih, minx, miny, maxx, maxy)
 end
 
 local color = ffi.new("GLfloat[960]", {
@@ -144,7 +144,7 @@ xforms.MatrixLoadIdentity(matrix)
 xforms.Perspective(matrix, 70, ww / wh, 1, 1000)
 
 render_state.SetProjectionMatrix(matrix)
-
+local oo=matrix
 local mvp = render_state.NewLazyMatrix()
 
 gl.glViewport( 0, 0, ww, wh )
@@ -289,10 +289,11 @@ local mx, my = 0, 0
 local function Clamp (x)
 	return math.min(math.max(x, -10), 10)
 end
-
+--sdl.SDL_ShowCursor(0)
 function MouseMotionHandler (motion)
 	if is_held then
 		mx, my = Clamp(motion.xrel) * 8 * Diff, Clamp(motion.yrel) * 8 * Diff
+--sdl.SDL_WarpMouseInWindow(sdl.SDL_GetMouseFocus(), 255, 255)
 	end
 end
 
@@ -318,20 +319,18 @@ local function DrawBoxAt (x, y, z, ext, color)
 	local xmin, ymin, zmin, xmax, ymax, zmax = Corner(x, y, z, ext)
 
 	lines.Draw(xmin, ymin, zmin, xmax, ymin, zmin, color)
+	lines.DrawTo(xmax, ymax, zmin)
+	lines.DrawTo(xmax, ymax, zmax)
+	lines.DrawTo(xmin, ymax, zmax)
+	lines.DrawTo(xmin, ymax, zmin)
+	lines.DrawTo(xmin, ymin, zmin)
+	lines.DrawTo(xmin, ymin, zmax)
+	lines.DrawTo(xmax, ymin, zmax)
+	lines.DrawTo(xmax, ymax, zmax)
+
 	lines.Draw(xmin, ymax, zmin, xmax, ymax, zmin, color)
-	lines.Draw(xmin, ymin, zmax, xmax, ymin, zmax, color)
-
-	lines.Draw(xmin, ymin, zmin, xmin, ymax, zmin, color)	
-	lines.Draw(xmax, ymin, zmin, xmax, ymax, zmin, color)
 	lines.Draw(xmin, ymin, zmax, xmin, ymax, zmax, color)
-
-	lines.Draw(xmin, ymin, zmin, xmin, ymin, zmax, color)
 	lines.Draw(xmax, ymin, zmin, xmax, ymin, zmax, color)
-	lines.Draw(xmin, ymax, zmin, xmin, ymax, zmax, color)
-
-	lines.Draw(xmax, ymax, zmax, xmin, ymax, zmax, color)
-	lines.Draw(xmax, ymax, zmax, xmax, ymin, zmax, color)
-	lines.Draw(xmax, ymax, zmax, xmax, ymax, zmin, color)
 end
 
 local function Test ()
@@ -358,7 +357,7 @@ local function Test ()
 	xforms.LookAt(matrix, pos[0], pos[1], pos[2], target[0], target[1], target[2], up[0], up[1], up[2])
 
 	render_state.SetModelViewMatrix(matrix)
-	
+
 	SP:Use()
 
 	SP:BindAttributeStream(loc_color, color, 4)

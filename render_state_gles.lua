@@ -53,7 +53,7 @@ local function NewMatrix ()
 end
 
 -- --
-local MVP, MV, Proj = NewMatrix()
+local MVP, ComputeMVP = NewMatrix()
 
 -- --
 local MatrixSize = ffi.sizeof(MVP.matrix)
@@ -80,13 +80,6 @@ local function CopyMatrix_Lazy (dst, src)
 	return diff
 end
 
---
-local function ComputeMVP ()
-	if MVP.counter < 0 then
-		xforms.MatrixMultiply(MVP.matrix, MV.matrix, Proj.matrix)
-	end
-end
-
 --- DOCME
 function M.GetModelViewProjection (mvp)
 	ComputeMVP()
@@ -101,7 +94,7 @@ function M.GetModelViewProjection_Lazy (mvp)
 end
 
 -- --
-MV = NewMatrix()
+local MV = NewMatrix()
 
 --- DOCME
 function M.GetModelView (mv)
@@ -114,7 +107,7 @@ function M.GetModelView_Lazy (mv)
 end
 
 -- --
-Proj = NewMatrix()
+local Proj = NewMatrix()
 
 --- DOCME
 function M.GetProjection (proj)
@@ -124,6 +117,13 @@ end
 --- DOCME
 function M.GetProjection_Lazy (proj)
 	return CopyMatrix_Lazy(proj, Proj)
+end
+
+--
+function ComputeMVP ()
+	if MVP.counter < 0 then
+		xforms.MatrixMultiply(MVP.matrix, MV.matrix, Proj.matrix)
+	end
 end
 
 --- DOCME

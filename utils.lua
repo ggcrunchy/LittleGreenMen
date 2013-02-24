@@ -26,8 +26,28 @@
 -- Standard library imports --
 local min = math.min
 
+-- Modules --
+local bit = require("bit")
+
+-- Imports --
+local bor = bit.bor
+local rshift = bit.rshift
+
 -- Exports --
 local M = {}
+
+--- DOCME
+function M.CLP2 (x)
+	x = x - 1
+
+	x = bor(x, rshift(x, 1))
+	x = bor(x, rshift(x, 2))
+	x = bor(x, rshift(x, 4))
+	x = bor(x, rshift(x, 8))
+	x = bor(x, rshift(x, 16))
+
+	return x + 1
+end
 
 --- DOCME
 function M.CubeCorners (x, y, z, ext)
@@ -38,21 +58,10 @@ function M.CubeCorners (x, y, z, ext)
 end
 
 --- DOCME
-function M.NextPowerOf2 (input)
-	local value = 1
-
-	while value < input do
-		value = value + value
-	end
-
-	return value
-end
-
---- DOCME
 function M.Sort2 (x, y)
 	local min_xy = min(x, y)
 
-	return minx_xy, x + y - min_xy
+	return min_xy, x + y - min_xy
 end
 
 -- Export the module.

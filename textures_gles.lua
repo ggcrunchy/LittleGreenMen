@@ -33,60 +33,105 @@ local xforms = require("transforms_gles")
 -- Exports --
 local M = {}
 
--- --
-local Proj = xforms.New()
+-- Types --
+local Float2 = ffi.typeof("float[2]")
 
 -- --
-local SP = shader_helper.NewShader{
-	vs = [[
-		attribute mediump vec2 position;
-		attribute mediump vec2 texcoord;
-		uniform mediump mat4 proj;
+local ShaderParams = {}
 
-		varying highp vec2 uv;
-		
-		void main ()
-		{
-			gl_Position = proj * vec4(position, 0, 1);
+-- --
+local N, DrawBatch, Name = 0
 
-			uv = texcoord;
-		}
-	]],
+--
+function ShaderParams.on_done ()
+	if N > 0 then
+		DrawBatch()
+	end
 
-	fs = [[
-		varying highp vec2 uv;
+	Name = nil
 
-		uniform sampler2D tex;
+	gl.glDisable(gl.GL_TEXTURE_2D)
+end
 
-		void main ()
-		{
-			gl_FragColor = texture2D(tex, uv);
-		}
-	]],
+-- --
+local MaxN = 32
 
-	on_done = function()
-		gl.glDisable(gl.GL_TEXTURE_2D)
-	end,
+-- --
+local Proj, LocProj = xforms.New()
+local Pos, LocPos = ffi.typeof("$[?]", Float2)(MaxN * 8)
+local Tex, LocTex = ffi.typeof("$[?]", Float2)(MaxN * 8)
 
-	on_use = function()
-		gl.glDisable(gl.GL_DEPTH_TEST)
-		gl.glDisable(gl.GL_CULL_FACE)
-		gl.glEnable(gl.GL_TEXTURE_2D)
+--
+local SW, SH
 
-		local screen = sdl.SDL_GetVideoSurface()
+--
+function ShaderParams:on_use ()
+	gl.glDisable(gl.GL_DEPTH_TEST)
+	gl.glDisable(gl.GL_CULL_FACE)
+	gl.glEnable(gl.GL_TEXTURE_2D)
+	gl.glActiveTexture(gl.GL_TEXTURE0)
 
-		gl.glViewport(0, 0, screen.w, screen.h)
+	self:BindAttributeStream(LocPos, Pos, 2)
+	self:BindAttributeStream(LocTex, Tex, 2)
+
+	local screen = sdl.SDL_GetVideoSurface()
+
+	gl.glViewport(0, 0, screen.w, screen.h)
+
+	if screen.w ~= SW or screen.h ~= SH then
+		SW, SH = screen.w, screen.h
 
 		xforms.MatrixLoadIdentity(Proj)
-		xforms.Ortho(Proj, 0, screen.w, screen.h, 0, 0, 1)
+		xforms.Ortho(Proj, 0, SW, SH, 0, 0, 1)
 
-		gl.glActiveTexture(gl.GL_TEXTURE0)
+		self:BindUniformMatrix(LocProj, Proj[0])
 	end
-}
+end
 
-local loc_proj = SP:GetUniformByName("proj")
-local loc_pos = SP:GetAttributeByName("position")
-local loc_tex = SP:GetAttributeByName("texcoord")
+--
+function ShaderParams:on_init ()
+	LocProj = self:GetUniformByName("proj")
+
+	LocPos = self:GetAttributeByName("position")
+	LocTex = self:GetAttributeByName("texcoord")
+end
+
+--
+ShaderParams.vs = [[
+	attribute mediump vec2 position;
+	attribute mediump vec2 texcoord;
+	uniform mediump mat4 proj;
+
+	varying highp vec2 uv;
+	
+	void main ()
+	{
+		gl_Position = proj * vec4(position, 0, 1);
+
+		uv = texcoord;
+	}
+]]
+
+--
+ShaderParams.fs = [[
+	varying highp vec2 uv;
+
+	uniform sampler2D tex;
+
+	void main ()
+	{
+		gl_FragColor = texture2D(tex, uv);
+	}
+]]
+
+-- --
+local SP = shader_helper.NewShader(ShaderParams)
+
+function DrawBatch ()
+	SP:DrawArrays(gl.GL_TRIANGLE_STRIP, N * 4) -- strip not the best choice... :P
+
+	N = 0
+end
 
 --- DOCME
 -- @param name
@@ -98,97 +143,36 @@ local loc_tex = SP:GetAttributeByName("texcoord")
 -- @param v1
 -- @param u2
 -- @param v2
-local bbb
-function M.Draw (name, x, y, w, h, u1, v1, u2, v2, aaa)
-if aaa then
-	if not bbb then
-SP = shader_helper.NewShader{
-	vs = [[
-		attribute mediump vec2 position;
-		attribute mediump vec2 texcoord;
-		uniform mediump mat4 proj;
-
-		varying highp vec2 uv;
-		
-		void main ()
-		{
-			gl_Position = proj * vec4(position, 0, 1);
-
-			uv = texcoord;
-		}
-	]],
-
-	fs = [[
-		varying highp vec2 uv;
-
-		uniform sampler2D tex;
-
-		void main ()
-		{
-			gl_FragColor = texture2D(tex, uv);
-		}
-	]],
-
-	on_done = function()
-		gl.glDisable(gl.GL_TEXTURE_2D)
-	end,
-
-	on_use = function()
-		gl.glDisable(gl.GL_DEPTH_TEST)
-		gl.glDisable(gl.GL_CULL_FACE)
-		gl.glEnable(gl.GL_TEXTURE_2D)
-
-		local screen = sdl.SDL_GetVideoSurface()
-
-		gl.glViewport(0, 0, screen.w, screen.h)
-
-		xforms.MatrixLoadIdentity(Proj)
-		xforms.Ortho(Proj, 0, screen.w, screen.h, 0, 0, 1)
-
-		gl.glActiveTexture(gl.GL_TEXTURE0)
-	end
-}
-
-loc_proj = SP:GetUniformByName("proj")
-loc_pos = SP:GetAttributeByName("position")
-loc_tex = SP:GetAttributeByName("texcoord")
-		bbb = true
-	end
-end
+function M.Draw (name, x, y, w, h, u1, v1, u2, v2)
 	SP:Use()
 
-	gl.glBindTexture(gl.GL_TEXTURE_2D, name)
+	--
+	if name ~= Name then
+		if N > 0 then
+			DrawBatch()
+		end
 
-	local tex = ffi.new("float[8]",
-		u1, v1,
-		u2, v1,
-		u1, v2,
-		u2, v2
-	)
+		gl.glBindTexture(gl.GL_TEXTURE_2D, name)
 
-	local ver = ffi.new("float[8]",
-		x, y,
-		x + w, y,
-		x, y + h,
-		x + w, y + h
-	)
--- TODO: batching...
-	SP:BindUniformMatrix(loc_proj, Proj[0])
-	SP:BindAttributeStream(loc_pos, ver, 2)
-	SP:BindAttributeStream(loc_tex, tex, 2)
-
-	SP:DrawArrays(gl.GL_TRIANGLE_STRIP, 4)
-end
-
---
-local function PowerOf2 (input)
-	local value = 1
-
-	while value < input do
-		value = value + value
+		Name = name
 	end
 
-	return value
+	--
+	Pos[N * 4 + 0] = Float2(x, y)
+	Pos[N * 4 + 1] = Float2(x + w, y)
+	Pos[N * 4 + 2] = Float2(x, y + h)
+	Pos[N * 4 + 3] = Float2(x + w, y + h)
+	Tex[N * 4 + 0] = Float2(u1, v1)
+	Tex[N * 4 + 1] = Float2(u2, v1)
+	Tex[N * 4 + 2] = Float2(u1, v2)
+	Tex[N * 4 + 3] = Float2(u2, v2)
+
+	--
+	N = N + 1
+
+	if N == MaxN then
+		DrawBatch()
+	end
 end
 
 --- DOCME
