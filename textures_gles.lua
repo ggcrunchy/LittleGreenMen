@@ -62,7 +62,7 @@ local Pos, LocPos = ffi.typeof("$[?]", Float2)(MaxN * 8)
 local Tex, LocTex = ffi.typeof("$[?]", Float2)(MaxN * 8)
 
 --
-local SW, SH
+local Screen = ffi.new("int[4]")
 
 --
 function ShaderParams:on_use ()
@@ -74,15 +74,15 @@ function ShaderParams:on_use ()
 	self:BindAttributeStream(LocPos, Pos, 2)
 	self:BindAttributeStream(LocTex, Tex, 2)
 
-	local screen = sdl.SDL_GetVideoSurface()
+	local screen = ffi.new("int[4]")
 
-	gl.glViewport(0, 0, screen.w, screen.h)
+	gl.glGetIntegerv(gl.GL_VIEWPORT, screen)
 
-	if screen.w ~= SW or screen.h ~= SH then
-		SW, SH = screen.w, screen.h
+	if screen[0] ~= Screen[0] or screen[1] ~= Screen[1] or screen[2] ~= Screen[2] or screen[3] ~= Screen[3] then
+		Screen = screen
 
 		xforms.MatrixLoadIdentity(Proj)
-		xforms.Ortho(Proj, 0, SW, SH, 0, 0, 1)
+		xforms.Ortho(Proj, screen[0], screen[0] + screen[2], screen[1] + screen[3], screen[1], 0, 1)
 
 		self:BindUniformMatrix(LocProj, Proj[0])
 	end

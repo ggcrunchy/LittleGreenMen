@@ -276,11 +276,55 @@ function KeyHandler (key, is_down)
 	end
 end
 
-local is_held
+local N, D = 1, .5
 
+local function VisitCube (func)
+	local index = 1
+
+	for i = -N, N, D do
+		for j = -N, N, D do
+			for k = -N, N, D do
+				func(i, j, k, D, index)
+
+				index = index + 1
+			end
+		end
+	end
+end
+
+local is_held
+local LLL
 function MouseButtonHandler (button, is_down)
 	if button.button == 1 then
 		is_held = is_down
+	end
+	if button.button == 3 then
+		if is_down then
+		local mvpi = xforms.New()
+		local viewport = ffi.new("int[4]")
+
+		render_state.GetModelViewProjection(mvpi)
+		gl.glGetIntegerv(gl.GL_VIEWPORT, viewport)
+		xforms.Invert(mvpi, mvpi)
+
+		local oc = ffi.new("double[3]")
+
+		xforms.Unproject_InverseMVP(button.x, viewport[3] - button.y, 0, mvpi, viewport, oc)
+
+		local x, y, z = oc[0], oc[1], oc[2]
+
+		xforms.Unproject_InverseMVP(button.x, viewport[3] - button.y + 2, 1, mvpi, viewport, oc)
+
+		LLL = {}
+		local ray = rs.MakeRayTo(x, y, z, oc[0], oc[1], oc[2])
+		VisitCube(function(i, j, k, d, index)
+			local box = rs.MakeAABox(Corner(i, j, k, d / 2 * .8))
+
+			LLL[index] = rs.SlopeInt(ray, box)
+		end)
+		else
+--			LLL = nil
+		end
 	end
 end
 
@@ -367,18 +411,9 @@ local function Test ()
 
 	DrawLogoCursor(100 + x, 100)
 --lines.Draw(pos[0] + 200, pos[1], pos[2] + 100, target[0], target[1], target[2], {0,1,0}, {1,0,0})
---[[
-local N, D = 1, .25
-for i = -N, N, D do
-	for j = -N, N, D do
-		lines.Draw(-N, i, j, N, i, j)
-		lines.Draw(i, -N, j, i, N, j)
-		lines.Draw(i, j, -N, i, j, N)
-	end
-end
-lines.Draw(-.75, 0, 1.5, -.75, .25, 1.5, {0, 0, 1})
-lines.Draw(.75, 0, 1.5, .75, -.25, 1.5, {0, 1, 0})
-]]
+	VisitCube(function(i, j, k, D, index)
+		DrawBoxAt(i, j, k, D / 2 * .8, (LLL and LLL[index]) and HitColor or nil)
+	end)
 DrawBoxAt(P[0], P[1], P[2], .025, { 0, 0, 1 })
 DrawBoxAt(PX, PY, PZ, .1, BoxColor)
 lines.Draw(P[0], P[1], P[2], Q[0], Q[1], Q[2], { 0, 1, 0 })
@@ -389,6 +424,12 @@ lines.Draw(P[0], P[1], P[2], Q[0], Q[1], Q[2], { 0, 1, 0 })
 	end
 	x = x + dx
 --	sdl.SDL_Delay(200)
+if LLL then
+if not DD then
+	DD = true
+end
+--	lines.Draw(unpack(LLL))
+end
 end
 
 
