@@ -377,6 +377,10 @@ local function DrawBoxAt (x, y, z, ext, color)
 	lines.Draw(xmax, ymin, zmin, xmax, ymin, zmax, color)
 end
 
+local ii = ffi.new("GLint[3]")
+
+ii[0] = -1
+
 local function Test ()
 	local ddir = dwheel * .2
 	local dside = CalcMove("left", "right", .2)
@@ -403,12 +407,37 @@ local function Test ()
 	render_state.SetModelViewMatrix(matrix)
 
 	SP:Use()
+if ii[0] < 0 then
+	gl.glGenBuffers(3, ii)
 
+	gl.glBindBuffer(gl.GL_ARRAY_BUFFER, ii[0])
+    gl.glBufferData(gl.GL_ARRAY_BUFFER, ffi.sizeof(color), color, gl.GL_STATIC_DRAW)
+
+	gl.glBindBuffer(gl.GL_ARRAY_BUFFER, ii[1])
+    gl.glBufferData(gl.GL_ARRAY_BUFFER, ffi.sizeof(CUBE.vertices), CUBE.vertices, gl.GL_STATIC_DRAW)
+
+	gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ii[2])
+	gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, ffi.sizeof(CUBE.indices), CUBE.indices, gl.GL_STATIC_DRAW)
+
+	gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
+	gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
+end
+---[=[
+gl.glBindBuffer(gl.GL_ARRAY_BUFFER, ii[0])
+	SP:BindAttributeStream(loc_color, ffi.cast("const GLvoid *", 0)--[[color]], 4)
+gl.glBindBuffer(gl.GL_ARRAY_BUFFER, ii[1])
+	SP:BindAttributeStream(loc_position, ffi.cast("const GLvoid *", 0)--[[CUBE.vertices]], 3)
+gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
+gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ii[2])
+	SP:DrawElements(gl.GL_TRIANGLES, ffi.cast("const GLvoid *", 0)--[[CUBE.indices]], CUBE.num_indices)
+gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
+--]=]
+--[[
 	SP:BindAttributeStream(loc_color, color, 4)
 	SP:BindAttributeStream(loc_position, CUBE.vertices, 3)
 
 	SP:DrawElements(gl.GL_TRIANGLES, CUBE.indices, CUBE.num_indices)
-
+--]]
 	DrawLogoCursor(100 + x, 100)
 --lines.Draw(pos[0] + 200, pos[1], pos[2] + 100, target[0], target[1], target[2], {0,1,0}, {1,0,0})
 	VisitCube(function(i, j, k, D, index)
