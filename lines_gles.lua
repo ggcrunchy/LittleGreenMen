@@ -50,7 +50,7 @@ local MVP, LocMVP = render_state.NewLazyMatrix()
 --
 function ShaderParams:on_draw ()
 	if render_state.GetModelViewProjection_Lazy(MVP) then
-		self:BindUniformMatrix(LocMVP, MVP.matrix[0])
+		self:BindUniformMatrix(LocMVP, MVP)
 	end
 end
 
@@ -72,19 +72,19 @@ local Pos, LocPos = ffi.typeof("$[?]", Float3)(MaxN * 2)
 local Color, LocColor = ffi.typeof("$[?]", Float4)(MaxN * 2)
 
 --
-function ShaderParams:on_use ()
-	gl.glEnable(gl.GL_DEPTH_TEST)
-
-	self:BindAttributeStream(LocPos, Pos, 3)
-	self:BindAttributeStream(LocColor, Color, 4)
-end
-
---
 function ShaderParams:on_init ()
 	LocMVP = self:GetUniformByName("mvp")
 
 	LocPos = self:GetAttributeByName("position")
 	LocColor = self:GetAttributeByName("color")
+end
+
+--
+function ShaderParams:on_use ()
+	gl.glEnable(gl.GL_DEPTH_TEST)
+
+	self:BindAttributeStream(LocPos, Pos, 3)
+	self:BindAttributeStream(LocColor, Color, 4)
 end
 
 --

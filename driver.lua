@@ -49,7 +49,6 @@ local M = {}
 
 -- Cone collision, then curve?
 
-
 -- TODO LIST --
 --[[
 1: Floor, walls, some stuff in middle generating and displaying
@@ -94,6 +93,8 @@ local function DrawLogoCursor (x, y)
 	end
 
 	textures.Draw(cursor_texture[0], x, y, iw, ih, minx, miny, maxx, maxy)
+
+	textures.Draw(cursor_texture[0], x + 145, y + 22, iw, ih, minx, miny, maxx, maxy)
 end
 
 local color = ffi.new("GLfloat[960]", {
@@ -141,7 +142,7 @@ local render_state = require("render_state_gles")
 local matrix = xforms.New()
 
 xforms.MatrixLoadIdentity(matrix)
-xforms.Perspective(matrix, 70, ww / wh, 1, 1000)
+xforms.Perspective(matrix, 70, ww / wh, .1, 1000)
 
 render_state.SetProjectionMatrix(matrix)
 local oo=matrix
@@ -151,18 +152,22 @@ gl.glViewport( 0, 0, ww, wh )
 local Diff
 local loc_mvp
 
+local CUBE = shapes.GenCube(1)
+
+local state
 local SP = shader_helper.NewShader{
 	vs = [[
 		attribute lowp vec4 color;
 		attribute mediump vec3 position;
 		varying lowp vec3 col;
 		uniform mediump mat4 mvp;
+		uniform mediump float bb;
 
 		void main ()
 		{
 			gl_Position = mvp * vec4(position, 1);
 
-			col = color.rgb;
+			col = color.rgb + bb * 1e-9;
 		}
 	]],
 
@@ -177,8 +182,18 @@ local SP = shader_helper.NewShader{
 
 	on_draw = function(sp)
 		if render_state.GetModelViewProjection_Lazy(mvp) then
-			sp:BindUniformMatrix(loc_mvp, mvp.matrix[0])
+			sp:BindUniformMatrix(loc_mvp, mvp)
 		end
+	end,
+
+	on_init = function(sp)
+		loc_mvp = sp:GetUniformByName("mvp")
+
+		state = sp:SetupBuffers{
+			{ data = color, loc = "color", attr_size = 4 },
+			{ data = CUBE.vertices, loc = "position", attr_size = 3 },
+			indices = { data = CUBE.indices }
+		}
 	end,
 
 	on_use = function()
@@ -188,11 +203,6 @@ local SP = shader_helper.NewShader{
 		gl.glEnable(gl.GL_CULL_FACE)
 	end
 }
-require("marching_cubes")
-local loc_color = SP:GetAttributeByName("color")
-local loc_position = SP:GetAttributeByName("position")
-
-loc_mvp = SP:GetUniformByName("mvp")
 
 local mc = require("mouse_camera")
 local v3math = require("lib.v3math")
@@ -265,7 +275,7 @@ function KeyHandler (key, is_down)
 		if sym ~= sdl.SDLK_SPACE then
 			local ray = rs.MakeRay(P[0], P[1], P[2], Q[0], Q[1], Q[2])
 
-			local hit, when =  rs.SlopeInt(ray, Box)
+			local hit, when = rs.SlopeInt(ray, Box)
 			if hit then
 			print("HIT AT", when)
 				BoxColor = HitColor
@@ -292,8 +302,29 @@ local function VisitCube (func)
 	end
 end
 
+local MC = require("marching_cubes.core")
+
+local Dim = N / D * 2 + 1
+local DD = 5
+local mcw = MC.Init(Dim * DD, Dim * DD, Dim * DD)
+
+local MMM
+
+local function mc_func (p0, p1, p2)
+	local a, b, c = ffi.new("double[3]"), ffi.new("double[3]"), ffi.new("double[3]")
+
+	for i = 0, 2 do
+		a[i] = -N + (p0[i] - D * (DD - 1)) * D / DD -- ???
+		b[i] = -N + (p1[i] - D * (DD - 1)) * D / DD
+		c[i] = -N + (p2[i] - D * (DD - 1)) * D / DD
+	end
+
+	MMM[#MMM + 1] = {a, b, c}
+end
+
 local is_held
 local LLL
+
 function MouseButtonHandler (button, is_down)
 	if button.button == 1 then
 		is_held = is_down
@@ -316,12 +347,42 @@ function MouseButtonHandler (button, is_down)
 		xforms.Unproject_InverseMVP(button.x, viewport[3] - button.y + 2, 1, mvpi, viewport, oc)
 
 		LLL = {}
+		MMM = {}
 		local ray = rs.MakeRayTo(x, y, z, oc[0], oc[1], oc[2])
+		mcw:Reset()
 		VisitCube(function(i, j, k, d, index)
-			local box = rs.MakeAABox(Corner(i, j, k, d / 2 * .8))
+			local box = rs.MakeAABox(Corner(i, j, k, d / 2--[[ * .8]]))
 
 			LLL[index] = rs.SlopeInt(ray, box)
+			if LLL[index] then
+				local ii, jj, kk = (i + N) / D, (j + N) / D, (k + N) / D
+				local ci, cj, ck = (DD - 1) / 2, (DD - 1) / 2, (DD - 1) / 2
+				local len = ci * ci + cj * cj + ck * ck
+
+				for io = 0, DD - 1 do
+					local id = (io - ci) * (io - ci)
+					for jo = 0, DD - 1 do
+						local jd = (jo - cj) * (jo - cj)
+						for ko = 0, DD - 1 do
+							local kd = (ko - ck) * (ko - ck)
+							local v = -len / 2 + (id + jd + kd)
+local xx = i + io * D / DD
+local yy = j + jo * D / DD
+local zz = k + ko * D / DD
+local a = (xx - ray.x) * ray.i + (yy - ray.y) * ray.j + (zz - ray.z) * ray.k
+if a < 0 then
+	v = 1
+else
+	local x2, y2, z2 = ray.x + ray.i * a, ray.y + ray.j * a, ray.z + ray.k * a
+	v = math.sqrt((xx - x2)^2 + (yy - y2)^2 + (zz - z2)^2) - .25 * D
+end
+							mcw:Set(ii * DD + io, jj * DD + jo, kk * DD + ko, v)
+						end
+					end
+				end
+			end
 		end)
+		MC.BuildIsoSurface(mcw, mc_func)
 		else
 --			LLL = nil
 		end
@@ -349,8 +410,6 @@ end
 
 local x, dx = 0, 1
 
-local CUBE = shapes.GenCube(1)
-
 local lines = require("lines_gles")
 
 local function Quit ()
@@ -376,10 +435,6 @@ local function DrawBoxAt (x, y, z, ext, color)
 	lines.Draw(xmin, ymin, zmax, xmin, ymax, zmax, color)
 	lines.Draw(xmax, ymin, zmin, xmax, ymin, zmax, color)
 end
-
-local ii = ffi.new("GLint[3]")
-
-ii[0] = -1
 
 local function Test ()
 	local ddir = dwheel * .2
@@ -407,45 +462,25 @@ local function Test ()
 	render_state.SetModelViewMatrix(matrix)
 
 	SP:Use()
-if ii[0] < 0 then
-	gl.glGenBuffers(3, ii)
+	SP:DrawBufferedElements(gl.GL_TRIANGLES, state)
 
-	gl.glBindBuffer(gl.GL_ARRAY_BUFFER, ii[0])
-    gl.glBufferData(gl.GL_ARRAY_BUFFER, ffi.sizeof(color), color, gl.GL_STATIC_DRAW)
-
-	gl.glBindBuffer(gl.GL_ARRAY_BUFFER, ii[1])
-    gl.glBufferData(gl.GL_ARRAY_BUFFER, ffi.sizeof(CUBE.vertices), CUBE.vertices, gl.GL_STATIC_DRAW)
-
-	gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ii[2])
-	gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, ffi.sizeof(CUBE.indices), CUBE.indices, gl.GL_STATIC_DRAW)
-
-	gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
-	gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
-end
----[=[
-gl.glBindBuffer(gl.GL_ARRAY_BUFFER, ii[0])
-	SP:BindAttributeStream(loc_color, ffi.cast("const GLvoid *", 0)--[[color]], 4)
-gl.glBindBuffer(gl.GL_ARRAY_BUFFER, ii[1])
-	SP:BindAttributeStream(loc_position, ffi.cast("const GLvoid *", 0)--[[CUBE.vertices]], 3)
-gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
-gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ii[2])
-	SP:DrawElements(gl.GL_TRIANGLES, ffi.cast("const GLvoid *", 0)--[[CUBE.indices]], CUBE.num_indices)
-gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
---]=]
---[[
-	SP:BindAttributeStream(loc_color, color, 4)
-	SP:BindAttributeStream(loc_position, CUBE.vertices, 3)
-
-	SP:DrawElements(gl.GL_TRIANGLES, CUBE.indices, CUBE.num_indices)
---]]
 	DrawLogoCursor(100 + x, 100)
+
 --lines.Draw(pos[0] + 200, pos[1], pos[2] + 100, target[0], target[1], target[2], {0,1,0}, {1,0,0})
 	VisitCube(function(i, j, k, D, index)
-		DrawBoxAt(i, j, k, D / 2 * .8, (LLL and LLL[index]) and HitColor or nil)
+		DrawBoxAt(i, j, k, D / 2--[[ * .8]], (LLL and LLL[index]) and HitColor or nil)
 	end)
 DrawBoxAt(P[0], P[1], P[2], .025, { 0, 0, 1 })
 DrawBoxAt(PX, PY, PZ, .1, BoxColor)
 lines.Draw(P[0], P[1], P[2], Q[0], Q[1], Q[2], { 0, 1, 0 })
+if MMM then
+	for _, t in ipairs(MMM) do
+		local a, b, c = t[1], t[2], t[3]
+		lines.Draw(a[0], a[1], a[2], b[0], b[1], b[2], { 0, 0, 1 })
+		lines.DrawTo(c[0], c[1], c[2])
+		lines.DrawTo(a[0], a[1], a[2])
+	end
+end
 	if x > 200 then
 		dx = -1
 	elseif x < -200 then

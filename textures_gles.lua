@@ -58,8 +58,36 @@ local MaxN = 32
 
 -- --
 local Proj, LocProj = xforms.New()
-local Pos, LocPos = ffi.typeof("$[?]", Float2)(MaxN * 8)
-local Tex, LocTex = ffi.typeof("$[?]", Float2)(MaxN * 8)
+local Pos, LocPos = ffi.typeof("$[?]", Float2)(MaxN * 4)--8)
+local Tex, LocTex = ffi.typeof("$[?]", Float2)(MaxN * 4)--8)
+-- ^^ TODO: 4 correct?
+-- TODO: Buffer this stuff?
+local Indices = ffi.new("GLushort[?]", MaxN * 6 - 2)
+
+local index, curr = 0, -1
+
+for i = 0, MaxN - 1 do
+	if i > 0 then
+		Indices[index + 0] = curr
+		Indices[index + 1] = curr + 1
+
+		index = index + 2
+	end
+
+	for j = 0, 3 do
+		curr = curr + 1
+		Indices[index] = curr
+		index = index + 1
+	end
+end
+
+--
+function ShaderParams:on_init ()
+	LocProj = self:GetUniformByName("proj")
+
+	LocPos = self:GetAttributeByName("position")
+	LocTex = self:GetAttributeByName("texcoord")
+end
 
 --
 local Screen = ffi.new("int[4]")
@@ -84,16 +112,8 @@ function ShaderParams:on_use ()
 		xforms.MatrixLoadIdentity(Proj)
 		xforms.Ortho(Proj, screen[0], screen[0] + screen[2], screen[1] + screen[3], screen[1], 0, 1)
 
-		self:BindUniformMatrix(LocProj, Proj[0])
+		self:BindUniformMatrix(LocProj, Proj)
 	end
-end
-
---
-function ShaderParams:on_init ()
-	LocProj = self:GetUniformByName("proj")
-
-	LocPos = self:GetAttributeByName("position")
-	LocTex = self:GetAttributeByName("texcoord")
 end
 
 --
@@ -128,7 +148,7 @@ ShaderParams.fs = [[
 local SP = shader_helper.NewShader(ShaderParams)
 
 function DrawBatch ()
-	SP:DrawArrays(gl.GL_TRIANGLE_STRIP, N * 4) -- strip not the best choice... :P
+	SP:DrawElements(gl.GL_TRIANGLE_STRIP, Indices, N * 6 - 2)
 
 	N = 0
 end
@@ -224,6 +244,7 @@ function M.LoadTexture (surface)
 	gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_NEAREST)
 	gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_NEAREST)
 	gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, format, image.w, image.h, 0, format, gl.GL_UNSIGNED_BYTE, image.pixels)
+	gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
 
 	sdl.SDL_FreeSurface(image)
 
