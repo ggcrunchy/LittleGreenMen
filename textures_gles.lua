@@ -58,9 +58,9 @@ local MaxN = 32
 
 -- --
 local Proj, LocProj = xforms.New()
-local Pos, LocPos = ffi.typeof("$[?]", Float2)(MaxN * 4)--8)
-local Tex, LocTex = ffi.typeof("$[?]", Float2)(MaxN * 4)--8)
--- ^^ TODO: 4 correct?
+local Pos, LocPos = ffi.typeof("$[?]", Float2)(MaxN * 4)
+local Tex, LocTex = ffi.typeof("$[?]", Float2)(MaxN * 4)
+
 -- TODO: Buffer this stuff?
 local Indices = ffi.new("GLushort[?]", MaxN * 6 - 2)
 
@@ -89,8 +89,8 @@ function ShaderParams:on_init ()
 	LocTex = self:GetAttributeByName("texcoord")
 end
 
---
-local Screen = ffi.new("int[4]")
+-- --
+local Screen = ffi.new("GLint[4]")
 
 --
 function ShaderParams:on_use ()
@@ -102,7 +102,7 @@ function ShaderParams:on_use ()
 	self:BindAttributeStream(LocPos, Pos, 2)
 	self:BindAttributeStream(LocTex, Tex, 2)
 
-	local screen = ffi.new("int[4]")
+	local screen = ffi.new(Screen)
 
 	gl.glGetIntegerv(gl.GL_VIEWPORT, screen)
 
@@ -212,6 +212,8 @@ function M.LoadTexture (surface)
 		return 0
 	end
 
+	sdl.SDL_LockSurface(image)
+
 	--
 	local ncolors, format = image.format.BytesPerPixel
 
@@ -220,23 +222,21 @@ function M.LoadTexture (surface)
 	elseif ncolors == 3 then
 		format = gl.GL_RGB
 	else
-		-- ERROR! (check this in XP...)
+		-- ERROR! (can this happen?)
 	end
 
 	-- No BGR / BGRA on ES: convert to RGB / RGBA.
-	if image.format.Rmask ~= 0x000000ff then
-		sdl.SDL_LockSurface(image)
-
-		local pixels = ffi.cast("uint8_t *", image.pixels)
+	if image.format.Rmask ~= 0x000000FF then
+		local pixels = ffi.cast("GLubyte *", image.pixels)
 
 		for i = 0, image.w * image.h * ncolors - 1, ncolors do
 			pixels[i], pixels[i + 2] = pixels[i + 2], pixels[i]
 		end
-
-		sdl.SDL_UnlockSurface(image)
 	end
 
 	--
+	-- TODO: This isn't working on... what? (in my case, Windows XP?)... Just get black boxes
+	-- TODO: Figure out tracking mechanism for buffers? (for cleanup)
 	local texture = ffi.new("GLuint[1]")
 	
 	gl.glGenTextures(1, texture)
@@ -246,6 +246,7 @@ function M.LoadTexture (surface)
 	gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, format, image.w, image.h, 0, format, gl.GL_UNSIGNED_BYTE, image.pixels)
 	gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
 
+	sdl.SDL_UnlockSurface(image)
 	sdl.SDL_FreeSurface(image)
 
 	return texture[0], 0, 0, 1, 1

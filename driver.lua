@@ -161,13 +161,12 @@ local SP = shader_helper.NewShader{
 		attribute mediump vec3 position;
 		varying lowp vec3 col;
 		uniform mediump mat4 mvp;
-		uniform mediump float bb;
 
 		void main ()
 		{
 			gl_Position = mvp * vec4(position, 1);
 
-			col = color.rgb + bb * 1e-9;
+			col = color.rgb;
 		}
 	]],
 
@@ -225,22 +224,11 @@ local function CalcMove (a, b, n)
 	return move * Diff
 end
 
-local PX, PY, PZ = -.75, 0, 1.5
-local P = ffi.new("double[3]", PX - .1, PY, PZ)
-local Q = ffi.new("double[3]", PX + .1, PY, PZ)
-local UsingP = true
-
-local function Corner (x, y, z, ext)
-	local xmin, ymin, zmin = x - ext, y - ext, z - ext
-	local xmax, ymax, zmax = x + ext, y + ext, z + ext
-
-	return xmin, ymin, zmin, xmax, ymax, zmax
-end
+local utils = require("utils")
 
 local rs = require("ray_slopes")
 
-local Box = rs.MakeAABox(Corner(PX, PY, PZ, .1))
-local HitColor, BoxColor = { 0, 1, 0 }
+local HitColor = { 0, 1, 0 }
 
 function KeyHandler (key, is_down)
 	local sym = key.keysym.sym
@@ -249,40 +237,6 @@ function KeyHandler (key, is_down)
 		keys.left = is_down
 	elseif sym == sdl.SDLK_RIGHT then
 		keys.right = is_down
-	end
-
-	if is_down then
-		local pt = UsingP and P or Q
-
-		if sym == sdl.SDLK_a then
-			pt[0] = pt[0] - .1
-		elseif sym == sdl.SDLK_d then
-			pt[0] = pt[0] + .1
-		elseif sym == sdl.SDLK_w then
-			pt[1] = pt[1] - .1
-		elseif sym == sdl.SDLK_s then
-			pt[1] = pt[1] + .1
-		elseif sym == sdl.SDLK_j then
-			pt[2] = pt[2] - .1
-		elseif sym == sdl.SDLK_k then
-			pt[2] = pt[2] + .1
-		elseif sym == sdl.SDLK_SPACE then
-			UsingP = not UsingP
-		else
-			return
-		end
-
-		if sym ~= sdl.SDLK_SPACE then
-			local ray = rs.MakeRay(P[0], P[1], P[2], Q[0], Q[1], Q[2])
-
-			local hit, when = rs.SlopeInt(ray, Box)
-			if hit then
-			print("HIT AT", when)
-				BoxColor = HitColor
-			else
-				BoxColor = nil
-			end
-		end
 	end
 end
 
@@ -310,7 +264,103 @@ local mcw = MC.Init(Dim * DD, Dim * DD, Dim * DD)
 
 local MMM
 
-local function mc_func (p0, p1, p2)
+local VN, IN = 500 * 3, 700 * 3
+
+local f3 = ffi.typeof("float[3]")
+local f3a = ffi.typeof("$[?]", f3)
+
+local VVV = f3a(VN)
+local III = ffi.new("uint16_t[?]", IN)
+
+local mm = require("marching_cubes.polygonize_basic")
+
+local nv, ni = mm.MaxAdded()
+local mcmvp = render_state.NewLazyMatrix()
+local mclocmvp
+
+local NV, NI
+
+local TV = f3a(nv)
+local TI = ffi.new("uint16_t[?]", ni)
+
+local mc_state, mcsp
+
+local function DrawMC ()
+	shader_helper.UpdateBuffers(mc_state)
+	mcsp:DrawBufferedElements(gl.GL_TRIANGLES, mc_state)
+
+	NV, NI = 0, 0
+end
+
+mcsp = shader_helper.NewShader{
+	vs = [[
+		attribute mediump vec3 position;
+		varying lowp vec3 col;
+		uniform mediump mat4 mvp;
+
+		void main ()
+		{
+			gl_Position = mvp * vec4(position, 1);
+
+			col = fract(position.xyz);
+		}
+	]],
+
+	fs = [[
+		varying lowp vec3 col;
+
+		void main ()
+		{
+			gl_FragColor = vec4(col, 1);
+		}
+	]],
+
+	on_done = function()
+		if NI > 0 then
+			DrawMC()
+		end
+	end,
+
+	on_draw = function(sp)
+		if render_state.GetModelViewProjection_Lazy(mcmvp) then
+			sp:BindUniformMatrix(mclocmvp, mcmvp)
+		end
+	end,
+
+	on_init = function(sp)
+		mclocmvp = sp:GetUniformByName("mvp")
+	end,
+
+	on_use = function()
+		gl.glViewport(0, 0, ww, wh)
+
+		gl.glEnable(gl.GL_DEPTH_TEST)
+		gl.glDisable(gl.GL_CULL_FACE)
+
+		NV, NI = 0, 0
+	end
+}
+
+mc_state = mcsp:SetupBuffers{
+	{
+		size = ffi.sizeof(VVV),
+		loc = "position",
+		attr_size = 3,
+		update = function()
+			return NV * 4 * 3, VVV
+		end
+	},
+	indices = {
+		size = ffi.sizeof(III),
+		update = function()
+			return NI * 2, III
+		end
+	}
+}
+
+local function mc_func (loader, i1, i2, i3, first)
+--[[
+	local p0, p1, p2 = loader.verts[i1], loader.verts[i2], loader.verts[i3]
 	local a, b, c = ffi.new("double[3]"), ffi.new("double[3]"), ffi.new("double[3]")
 
 	for i = 0, 2 do
@@ -318,13 +368,35 @@ local function mc_func (p0, p1, p2)
 		b[i] = -N + (p1[i] - D * (DD - 1)) * D / DD
 		c[i] = -N + (p2[i] - D * (DD - 1)) * D / DD
 	end
+]]
+--	MMM[#MMM + 1] = {a, b, c}
+	if first then
+		for i = 0, loader.nverts - 1 do
+			local p, q = loader.verts[i], VVV[NV + i]
 
-	MMM[#MMM + 1] = {a, b, c}
+			for j = 0, 2 do
+				q[j] = -N + (p[j] - D * (DD - 1)) * D / DD
+			end
+		end
+
+		for i = 0, #loader - 1 do
+			III[NI + i] = NV + loader.indices[i]
+		end
+
+		NV = NV + loader.nverts
+		NI = NI + #loader
+
+		if NV + nv > VN or NI + ni > IN then
+			DrawMC()
+		end
+	end
 end
 
+GGG = { TV, TI }
 local is_held
 local LLL
-
+local fff = mm.DoCell
+local aaa = require("marching_cubes.common").VertexLoaderBasic(TV, TI)
 function MouseButtonHandler (button, is_down)
 	if button.button == 1 then
 		is_held = is_down
@@ -332,7 +404,7 @@ function MouseButtonHandler (button, is_down)
 	if button.button == 3 then
 		if is_down then
 		local mvpi = xforms.New()
-		local viewport = ffi.new("int[4]")
+		local viewport = ffi.new("GLint[4]")
 
 		render_state.GetModelViewProjection(mvpi)
 		gl.glGetIntegerv(gl.GL_VIEWPORT, viewport)
@@ -351,7 +423,7 @@ function MouseButtonHandler (button, is_down)
 		local ray = rs.MakeRayTo(x, y, z, oc[0], oc[1], oc[2])
 		mcw:Reset()
 		VisitCube(function(i, j, k, d, index)
-			local box = rs.MakeAABox(Corner(i, j, k, d / 2--[[ * .8]]))
+			local box = rs.MakeAABox(utils.CubeCorners(i, j, k, d / 2--[[ * .8]]))
 
 			LLL[index] = rs.SlopeInt(ray, box)
 			if LLL[index] then
@@ -359,11 +431,12 @@ function MouseButtonHandler (button, is_down)
 				local ci, cj, ck = (DD - 1) / 2, (DD - 1) / 2, (DD - 1) / 2
 				local len = ci * ci + cj * cj + ck * ck
 
-				for io = 0, DD - 1 do
+				for io = -4, DD + 3 do--0, DD - 1 do
 					local id = (io - ci) * (io - ci)
-					for jo = 0, DD - 1 do
+					for jo = -4, DD + 3 do--0, DD - 1 do
 						local jd = (jo - cj) * (jo - cj)
-						for ko = 0, DD - 1 do
+
+						for ko = -4, DD + 3 do--0, DD - 1 do
 							local kd = (ko - ck) * (ko - ck)
 							local v = -len / 2 + (id + jd + kd)
 local xx = i + io * D / DD
@@ -382,7 +455,7 @@ end
 				end
 			end
 		end)
-		MC.BuildIsoSurface(mcw, mc_func)
+--		MC.BuildIsoSurface(mcw, aaa, fff, mc_func)
 		else
 --			LLL = nil
 		end
@@ -419,7 +492,7 @@ local function Quit ()
 end
 
 local function DrawBoxAt (x, y, z, ext, color)
-	local xmin, ymin, zmin, xmax, ymax, zmax = Corner(x, y, z, ext)
+	local xmin, ymin, zmin, xmax, ymax, zmax = utils.CubeCorners(x, y, z, ext)
 
 	lines.Draw(xmin, ymin, zmin, xmax, ymin, zmin, color)
 	lines.DrawTo(xmax, ymax, zmin)
@@ -470,9 +543,15 @@ local function Test ()
 	VisitCube(function(i, j, k, D, index)
 		DrawBoxAt(i, j, k, D / 2--[[ * .8]], (LLL and LLL[index]) and HitColor or nil)
 	end)
-DrawBoxAt(P[0], P[1], P[2], .025, { 0, 0, 1 })
-DrawBoxAt(PX, PY, PZ, .1, BoxColor)
-lines.Draw(P[0], P[1], P[2], Q[0], Q[1], Q[2], { 0, 1, 0 })
+
+	mcsp:Use()
+if MMM then
+	MC.BuildIsoSurface(mcw, aaa, fff, mc_func)
+	MMM=nil
+else
+	mcsp:DrawBufferedElements(gl.GL_TRIANGLES, mc_state)
+end
+
 if MMM then
 	for _, t in ipairs(MMM) do
 		local a, b, c = t[1], t[2], t[3]

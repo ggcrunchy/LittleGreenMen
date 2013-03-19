@@ -26,6 +26,7 @@
 -- Modules --
 local ffi = require("ffi")
 local data_structure_ops = require("data_structure_ops")
+local mi_small = require("marching_cubes.morton_indexed_small")
 local utils = require("utils")
 
 -- Imports --
@@ -34,6 +35,7 @@ local bor = bit.bor
 local cast = ffi.cast
 local Lg_PowerOf2 = utils.Lg_PowerOf2
 local lshift = bit.lshift
+local max = math.max
 local min = math.min
 local MortonTriple = utils.MortonTriple
 local Morton3 = utils.Morton3
@@ -359,12 +361,15 @@ end
 ffi.metatype(Packed, {
 	-- --
 	__new = function(ct, nx, ny, nz, none)
-		-- max(nx, ny, nz) <= 32? -> MortonIndexedTiny
-		-- TODO: Validate n*?
+		if max(nx, ny, nz) <= 32 then
+			return mi_small(nx, ny, nz, none)
+		else
+			-- TODO: Validate n*?
 
-		local id = Blocks.NewStore()
+			local id = Blocks.NewStore()
 
-		return ffi.new(ct, nx, ny, nz, id, none or 1)
+			return ffi.new(ct, nx, ny, nz, id, none or 1)
+		end
 	end,
 
 	-- --

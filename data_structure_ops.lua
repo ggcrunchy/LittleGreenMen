@@ -71,7 +71,7 @@ function M.NewStoreGroup (ncache)
 
 			return store[count], count - 1
 		else
-			return store[index]
+			return store[index + 1]
 		end
 	end
 

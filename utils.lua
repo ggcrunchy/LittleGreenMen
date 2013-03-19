@@ -64,7 +64,7 @@ do
 	-- --
 	local LgUnion = ffi.new[[
 		union {
-			uint32_t u[2];
+			int32_t i[2];
 			double d;
 		}
 	]]
@@ -74,14 +74,12 @@ do
 
 	--- DOCME
 	function M.Lg_PowerOf2 (n)
-		local ge = 1 - LE
-
-		LgUnion.u[LE] = 0x43300000
-		LgUnion.u[ge] = n
+		LgUnion.i[LE] = 0x43300000
+		LgUnion.i[1 - LE] = n
 
 		LgUnion.d = LgUnion.d - 4503599627370496
 
-		return rshift(LgUnion.u[LE], 20) - 0x3FF
+		return rshift(LgUnion.i[LE], 20) - 0x3FF
 	end
 --[[
 	Compare above to:

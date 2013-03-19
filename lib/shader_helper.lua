@@ -244,13 +244,21 @@ function ShaderMT:SetupBuffers (elements)
 			loc = self:GetAttributeByName(loc)
 		end
 
-		state.attribs[#state.attribs + 1] = { loc = loc, size = v.attr_size }
+		state.attribs[#state.attribs + 1] = { loc = loc, size = v.attr_size, update = v.update }
 	end
 
 	if elements.indices then
 		SetupBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, elements.indices, state.buffers[n - 1])
 
-		state.num_indices = elements.num_indices or ffi.sizeof(elements.indices.data) / 2 -- TODO: size of index...
+		if elements.num_indices then
+			state.num_indices = elements.num_indices
+		elseif elements.indices.data ~= nil then
+			state.num_indices = ffi.sizeof(elements.indices.data) / 2 -- TODO: size of index...
+		else
+			state.num_indices = 0
+		end
+ 
+		state.update_indices = elements.indices.update
 	end
 
 	WipeBuffers()
@@ -373,6 +381,47 @@ function M.NewShader (params)
 		return shader
 	else
 		return nil, err
+	end
+end
+
+--
+local function UpdateBuffer (state, k, index, update, arg)
+	if update then
+		local size, data, offset = update(arg)
+
+		if size and size > 0 then
+			gl.glBindBuffer(k, state.buffers[index])
+			gl.glBufferSubData(k, offset or 0, size, data)
+
+			return size
+		end
+	end
+end
+
+--- DOCME
+-- @param state
+-- @param arg
+function M.UpdateBuffers (state, arg)
+	local curb = ffi.new("GLint[1]")
+
+	--
+	gl.glGetIntegerv(gl.GL_ARRAY_BUFFER_BINDING, curb)
+
+	for i, v in ipairs(state.attribs) do
+		UpdateBuffer(state, gl.GL_ARRAY_BUFFER, i - 1, v.update, arg)
+	end
+
+	gl.glBindBuffer(gl.GL_ARRAY_BUFFER, curb[0])
+
+	--
+	gl.glGetIntegerv(gl.GL_ELEMENT_ARRAY_BUFFER_BINDING, curb)
+
+	local size = UpdateBuffer(state, gl.GL_ELEMENT_ARRAY_BUFFER, #state.attribs, state.update_indices, arg)
+
+	if size then
+		state.num_indices = size / 2 -- TODO: size of index...
+
+		gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, curb[0])
 	end
 end
 

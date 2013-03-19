@@ -59,13 +59,13 @@ local utils = require("utils")
 -- Imports --
 local band = bit.band
 local bor = bit.bor
-local cast = ffi.cast
 local Lg_PowerOf2 = utils.Lg_PowerOf2
 local lshift = bit.lshift
 local min = math.min
 local MortonTriple = utils.MortonTriple
 local Morton3 = utils.Morton3
-local SetCell = common.SetCell
+local SetCellCorner = common.SetCellCorner
+local SetCellCornerValue = common.SetCellCornerValue
 local rshift = bit.rshift
 
 -- --
@@ -73,8 +73,8 @@ local Descriptor = ffi.typeof[[
 	struct {
 		int32_t in_use; // Which elements of info are valid?
 		struct {
-			int8_t block : 4; // Block index, in [0, 15)
-			int8_t bin : 4; // Bin index, in [0, 15)
+			uint8_t block : 4; // Block index, in [0, 15)
+			uint8_t bin : 4; // Bin index, in [0, 15)
 		} info[32]; // Where to look for each 128-element slice owned by this descriptor
 	}
 ]]
@@ -90,97 +90,101 @@ local Block = ffi.typeof[[
 -- --
 local Cur = ffi.typeof([[
 	struct {
-		int32_t base, offset; // Base index (multiple of 2K) of current descriptor; sub-slice offset (multiple of 32) from base
+		int32_t base, offset; // Base index of current slice (multiple of 128); offset into sub-slice (multiple of 32)
 		int32_t in_use, used; // Next value of descriptor and slice usage flags
 		int32_t desc_index; // Index of next descriptor to iterate, in [0, 8)
 		int32_t used_index; // Index of next element of used_arr to iterate, in [0, 4)
 		$ * desc; // Currently iterated descriptor
 		int32_t * used_arr; // Currently iterated "using which values in slice?" flags
-		double * values; // Current values sub-slice
+		double * values; // Current slice values
 	}
 ]], Descriptor)
 
 -- --
 local State = ffi.typeof([[
-	int32_t nx, ny, nz; // Dimensions of volume
-	int32_t id; // ID used to maintain GC resources
-	int32_t cur_bin; // Current bin, which will be alloted from the newest block
-	double none; // "Missing" value
-	$ cur; // Iteration state
-	$ * descriptors[8]; // Descriptors for each 2K range of Morton numbers
-]], Cur, Descriptor)
+	struct {
+		int32_t ex, ey, ez; // Grid extents, i.e. maximum x, y, z (dimension - 1)
+		int32_t id; // ID used to maintain GC resources
+		int32_t cur_bin; // Current bin, which will be alloted from the newest block
+		double none; // "Missing" value
+		$ * descriptors[8]; // Descriptors for each 2K range of Morton numbers
+	}
+]], Descriptor)
 
--- --
+-- Methods --
 local MarchingCubes_MortonIndexedSmall = {}
 
---- DOCME
+--- Prepares the walker for iteration.
+-- @treturn cur X
 function MarchingCubes_MortonIndexedSmall:Begin ()
-	self.cur.desc_index = 0
-	self.cur.used_index = 4
-	self.cur.in_use = 0
-	self.cur.used = 0
+	local cur = Cur()
+
+	cur.used_index = 4
+
+	return cur
 end
 
 -- --
-local BlockStore = data_structure_ops.NewStoreGroup(10)
+local Blocks = data_structure_ops.NewStoreGroup(10)
 
---- DOCME
-function MarchingCubes_MortonIndexedSmall:Next ()
--- TODO: Need another offset? (one for descriptor, one for block?)
+--- Performs an iteration step.
+-- @treturn boolean Is iteration done?
+function MarchingCubes_MortonIndexedSmall:Next (cur)
 	repeat
 		-- Does the sub-slice have elements?
-		if self.cur.used ~= 0 then
-			local flag = band(self.cur.used, -self.cur.used)
+		if cur.used ~= 0 then
+			local flag = band(cur.used, -cur.used)
 
-			self.cur.offset = Lg_PowerOf2(flag)
-			self.cur.used = self.cur.used - flag
+			cur.offset = Lg_PowerOf2(flag)
+			cur.used = cur.used - flag
 
 			return true
 
 		-- ...does the rest of the slice?
-		elseif self.cur.used_index < 4 then
+		elseif cur.used_index < 4 then
 			repeat
-				self.cur.used = self.cur.used_arr[self.cur.used_index]
-				self.cur.used_index = self.cur.used_index + 1
-				self.cur.base = self.cur.base + 32
-				self.cur.values = self.cur.values + 32
-			until self.cur.used ~= 0 or self.cur.used_index == 4
+				cur.used = cur.used_arr[cur.used_index]
+				cur.used_index = cur.used_index + 1
+			until cur.used ~= 0 or cur.used_index == 4
 
 		-- ...does the descriptor?
-		elseif self.cur.in_use ~= 0 then
-			local flag = band(self.cur.in_use, -self.cur.in_use)
+		elseif cur.in_use ~= 0 then
+			local flag = band(cur.in_use, -cur.in_use)
 			local offset = Lg_PowerOf2(flag)
-			local info = self.cur.desc.info[offset]
-			local block = BlockStore.GetItem(self.id, info.block)
+			local info = cur.desc.info[offset]
+			local block = Blocks.GetItem(self.id, info.block)
 			local to_slice = lshift(info.bin, 7)
 
-			self.cur.base = lshift(self.cur.desc_index - 1, 12) + lshift(offset, 7)
-			self.cur.in_use = self.cur.in_use - flag
-			self.cur.used_arr = block.used[info.bin]
-			self.cur.used = self.cur.used_arr[0]
-			self.cur.used_index = 1
-			self.cur.values = block.values + to_slice
+			cur.base = lshift(cur.desc_index - 1, 12) + lshift(offset, 7)
+			cur.in_use = cur.in_use - flag
+			cur.used_arr = block.used[info.bin]
+			cur.used = cur.used_arr[0]
+			cur.used_index = 1
+			cur.values = block.values + to_slice
 
 		-- ...do the rest of the descriptors?
-		elseif self.cur.desc_index < 8 then
-			repeat
-				self.cur.desc = self.descriptors[self.cur.desc_index]
-				self.cur.desc_index = self.cur.desc_index + 1
-			until (self.cur.desc ~= nil) or self.cur.desc_index == 8
+		else
+			while cur.desc_index < 8 do
+				cur.desc = self.descriptors[cur.desc_index]
+				cur.desc_index = cur.desc_index + 1
 
-			if self.cur.desc ~= nil then
-				self.cur.in_use = self.cur.desc.in_use
+				if cur.desc ~= nil then
+					cur.in_use = cur.desc.in_use
+
+					break
+				end
 			end
 
-		-- Iteration complete.
-		else
-			return false
+			-- Iteration complete.
+			if not (cur.desc_index < 8) then
+				return false
+			end
 		end
 	until false
 end
 
 -- --
-local DescriptorStore = data_structure_ops.NewStoreGroup(10)
+local Descriptors = data_structure_ops.NewStoreGroup(10)
 
 --- DOCME
 function MarchingCubes_MortonIndexedSmall:Reset ()
@@ -190,13 +194,13 @@ function MarchingCubes_MortonIndexedSmall:Reset ()
 		self.descriptors[i] = nil
 	end
 
-	BlockStore.ClearStore(self.id)
-	DescriptorStore.ClearStore(self.id)
+	Blocks.ClearStore(self.id)
+	Descriptors.ClearStore(self.id)
 end
 
 --- DOCME
 function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
-	if x >= 0 and x < self.nx and y >= 0 and y < self.ny and z >= 0 and z < self.nz then
+	if common.WithinGrid(self, x, y, z) then
 		local morton = Morton3(x, y, z) -- In [0, 2^15)
 		local dslot = rshift(morton, 12) -- Bits 12-14: descriptor slot, in [0, 8)
 
@@ -204,11 +208,11 @@ function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
 		local desc = self.descriptors[dslot]
 
 		if desc == nil then
-			desc = DescriptorStore.PopCache() or Descriptor()
+			desc = Descriptors.PopCache() or Descriptor()
 
 			self.descriptors[dslot], desc.in_use = desc, 0
 
-			DescriptorStore.AddToStore(self.id, desc)
+			Descriptors.AddToStore(self.id, desc)
 		end
 
 		-- The index's 192-element sub-range may already have been alloted. In this case,
@@ -217,7 +221,7 @@ function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
 		local iflag, info, block, used = lshift(1, islot), desc.info[islot]
 
 		if band(desc.in_use, iflag) ~= 0 then
-			block = BlockStore.GetItem(self.id, info.block)
+			block = Blocks.GetItem(self.id, info.block)
 			used = block.used[info.bin]
 
 		-- Otherwise, allot a new sub-range.
@@ -230,10 +234,10 @@ function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
 			self.cur_bin = band(self.cur_bin, 15)
 
 			if self.cur_bin == 0 then
-				block = BlockStore.PopCache() or Block()
-				info.block = BlockStore.AddToStore(self.id, block)
+				block = Blocks.PopCache() or Block()
+				info.block = Blocks.AddToStore(self.id, block)
 			else
-				block, info.block = BlockStore.GetItem(self.id, true)
+				block, info.block = Blocks.GetItem(self.id, true)
 			end
 
 			info.bin = self.cur_bin
@@ -254,83 +258,84 @@ function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
 	end
 end
 
---
-local function AssignValue (mcp, cell, ci, i, j, k, data, offset)
-	local hindex, lindex = BinOffset(offset)
-	local value = mcp.none
-
-	if band(data.in_use, lshift(1, hindex)) ~= 0 and band(data.used[hindex], lshift(1, lindex)) ~= 0 then
-		value = data.values[offset]
-	end
-
-	SetCell(cell, ci, i, j, k, value)
-end
-
 -- --
-local DeferredCorners = ffi.new[[
+local DeferredCorners = ffi.typeof[[
 	struct {
 		struct {
-			int32_t base, index;
-			int16_t ci, i, j, k;
+			int32_t offset; // Offset in data bin, in [0, 128)
+			int32_t ci; // Cell corner index, in [1, 7)
+			uint32_t block; // Block index, q.v. Descriptor
+			uint32_t bin; // Bin index, likewise
 		} corner[7];
-		int32_t n;
+		int32_t n; // Number of deferred corners
 	}
 ]]
 
---
-local function TrySetCell (mcp, cell, ci, i, j, k, index)
-	local offset = band(index, 1023)
+-- Assigns a corner value, if convenient, deferring it otherwise
+local function TrySetCellCorner (mcp, cell, cur, dc, ci, i, j, k, index)
+	local ioffset, value = band(index, 127)
 
-	--
-	if index - offset == mcp.cur.data.base then
-		AssignValue(mcp, cell, ci, i, j, k, mcp.cur.data, offset)
+	-- If the corner is already in the current data bin, grab its value directly.
+	if rshift(index - cur.base, 7) == 0 then
+		local uslot, uindex = rshift(ioffset, 5), band(ioffset, 31)
 
-	--
+		value = band(cur.used_arr[uslot], lshift(1, uindex)) ~= 0 and cur.values[ioffset]
+
+	-- Otherwise, if the bin even exists, defer the assignment.
 	else
-		local corner = DeferredCorners.corner[DeferredCorners.n]
+		local desc = mcp.descriptors[rshift(index, 12)]
+		local islot = band(rshift(index, 7), 31)
 
-		corner.base = index - offset
-		corner.index, corner.ci = index, ci
-		corner.i, corner.j, corner.k = i, j, k
+		if desc ~= nil and band(desc.in_use, lshift(1, islot)) ~= 0 then
+			local corner = dc.corner[dc.n]
+			local info = desc.info[islot]
 
-		DeferredCorners.n = DeferredCorners.n + 1
+			corner.offset = ioffset
+			corner.ci, corner.block, corner.bin = ci, info.block, info.bin
+
+			dc.n = dc.n + 1
+		end
 	end
+
+	-- Assign the value (using "none", if it was missing) along with some extra state. Any
+	-- deferred value is taken as missing; if this turns out to be a false assumption, only
+	-- its value needs to be patched.
+	SetCellCorner(cell, ci, i, j, k, value or mcp.none)
 end
 
 --- DOCME
-function MarchingCubes_MortonIndexedSmall:SetCell (cell)
--- TODO!
-	local index = self.cur.base + self.cur.offset
+function MarchingCubes_MortonIndexedSmall:SetCell (cell, cur)
+	local offset = lshift(cur.used_index - 1, 5) + cur.offset
+	local index = cur.base + offset
 	local i, j, k = MortonTriple(index)
 
-	--
-	SetCell(cell, 0, i, j, k, self.cur.values[self.cur.offset])
+	-- Mark the lowest-indexed corner, which is assumed to exist.
+	SetCellCorner(cell, 0, i, j, k, cur.values[offset])
 
-	--
-	DeferredCorners.n = 0
-
-	local i2, j2, k2 = min(i + 1, self.nx - 1), min(j + 1, self.ny - 1), min(k + 1, self.nz - 1)
+	-- The other corners require some extra effort, since they cannot be assumed to exist,
+	-- and even then, they may be in a non-local data bin.
+	local i2, j2, k2 = min(i + 1, self.ex), min(j + 1, self.ey), min(k + 1, self.ez)
 	local di = Morton3(i2, j, k) - index
 	local dj = Morton3(i, j2, k) - index
 	local dk = Morton3(i, j, k2) - index
+	local dc = DeferredCorners()
 
-	TrySetCell(self, cell, 1, i2, j, k, index + di)
-	TrySetCell(self, cell, 2, i2, j, k2, (index + di) + dk)
-	TrySetCell(self, cell, 3, i, j, k2, index + dk)
-	TrySetCell(self, cell, 4, i, j2, k, index + dj)
-	TrySetCell(self, cell, 5, i2, j2, k, (index + di) + dj)
-	TrySetCell(self, cell, 6, i2, j2, k2, (index + di) + (dj + dk))
-	TrySetCell(self, cell, 7, i, j2, k2, index + (dj + dk))
+	TrySetCellCorner(self, cell, cur, dc, 1, i2, j, k, index + di)
+	TrySetCellCorner(self, cell, cur, dc, 2, i2, j, k2, (index + di) + dk)
+	TrySetCellCorner(self, cell, cur, dc, 3, i, j, k2, index + dk)
+	TrySetCellCorner(self, cell, cur, dc, 4, i, j2, k, index + dj)
+	TrySetCellCorner(self, cell, cur, dc, 5, i2, j2, k, (index + di) + dj)
+	TrySetCellCorner(self, cell, cur, dc, 6, i2, j2, k2, (index + di) + (dj + dk))
+	TrySetCellCorner(self, cell, cur, dc, 7, i, j2, k2, index + (dj + dk))
 
-	--
-	for i = 0, DeferredCorners.n - 1 do
-		local corner = DeferredCorners.corner[i]
-		local data = FindBlock(self, corner.base)
+	-- Do all (potentially) non-local corners.
+	for i = 0, dc.n - 1 do
+		local corner = dc.corner[i]
+		local block = Blocks.GetItem(self.id, corner.block)
+		local uslot, uindex = rshift(corner.offset, 5), band(corner.offset, 31)
 
-		if data ~= nil then
-			AssignValue(self, cell, corner.ci, corner.i, corner.j, corner.k, data, corner.index - corner.base)
-		else
-			SetCell(cell, corner.ci, corner.i, corner.j, corner.k, self.none)
+		if band(block.used[corner.bin][uslot], lshift(1, uindex)) ~= 0 then
+			SetCellCornerValue(cell, corner.ci, block.values[lshift(corner.bin, 7) + corner.offset])
 		end
 	end
 end
@@ -345,7 +350,7 @@ ffi.metatype(State, {
 
 		Descriptors.NewStore()
 
-		return ffi.new(ct, nx, ny, nz, id, none or 1)
+		return ffi.new(ct, nx - 1, ny - 1, nz - 1, id, none or 1)
 	end,
 
 	-- --
