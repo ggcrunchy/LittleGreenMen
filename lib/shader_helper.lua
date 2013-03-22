@@ -127,7 +127,7 @@ function ShaderMT:Disable ()
 end
 
 --
-local function Enable (shader)
+local function Draw (shader)
 	if shader._alocs ~= BoundLocs then
 		Disable()
 
@@ -137,11 +137,7 @@ local function Enable (shader)
 
 		BoundLocs = shader._alocs
 	end
-end
 
---
-local function Draw (shader)
-	Enable(shader)
 -- TODO: Could do actual upload of uniforms here
 	shader:_on_draw()
 end

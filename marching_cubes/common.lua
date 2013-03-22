@@ -138,15 +138,7 @@ function M.VertexInterp (cell, i1, i2, iso)
 	local p1, valp1 = cell.p[i1], cell.val[i1]
 	local p2, valp2 = cell.p[i2], cell.val[i2]
 
-	if abs(iso - valp1) < 0.00001 then
-		return p1
-	end
-
-	if abs(iso - valp2) < 0.00001 then
-		return p2
-	end
-
-	if abs(valp1 - valp2) < 0.00001 then
+	if abs(valp2 - valp1) < 0.00001 then
 		return p1
 	end
 
@@ -157,7 +149,7 @@ end
 
 --- DOCME
 function M.WithinGrid (walker, x, y, z)
-	return min(x, y, z, walker.ex - x, walker.ey - y, walker.ez - z) >= 0
+	return min(x, walker.ex - x) >= 0 and min(y, walker.ey - y) >= 0 and min(z, walker.ez - z) >= 0
 end
 
 -- Export the module.

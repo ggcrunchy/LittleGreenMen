@@ -340,7 +340,8 @@ mcsp = shader_helper.NewShader{
 		NV, NI = 0, 0
 	end
 }
-
+local v = require("jit.v")
+v.start("Out.txt")
 mc_state = mcsp:SetupBuffers{
 	{
 		size = ffi.sizeof(VVV),
@@ -358,7 +359,7 @@ mc_state = mcsp:SetupBuffers{
 	}
 }
 
-local function mc_func (loader, i1, i2, i3, first)
+local function mc_func (loader)--, i1, i2, i3, first)
 --[[
 	local p0, p1, p2 = loader.verts[i1], loader.verts[i2], loader.verts[i3]
 	local a, b, c = ffi.new("double[3]"), ffi.new("double[3]"), ffi.new("double[3]")
@@ -370,7 +371,7 @@ local function mc_func (loader, i1, i2, i3, first)
 	end
 ]]
 --	MMM[#MMM + 1] = {a, b, c}
-	if first then
+--	if first then
 		for i = 0, loader.nverts - 1 do
 			local p, q = loader.verts[i], VVV[NV + i]
 
@@ -389,7 +390,7 @@ local function mc_func (loader, i1, i2, i3, first)
 		if NV + nv > VN or NI + ni > IN then
 			DrawMC()
 		end
-	end
+--	end
 end
 
 GGG = { TV, TI }
@@ -412,11 +413,11 @@ function MouseButtonHandler (button, is_down)
 
 		local oc = ffi.new("double[3]")
 
-		xforms.Unproject_InverseMVP(button.x, viewport[3] - button.y, 0, mvpi, viewport, oc)
+		xforms.Unproject_InverseMVP(button.x + .5, viewport[3] - button.y + .5, 0, mvpi, viewport, oc)
 
 		local x, y, z = oc[0], oc[1], oc[2]
 
-		xforms.Unproject_InverseMVP(button.x, viewport[3] - button.y + 2, 1, mvpi, viewport, oc)
+		xforms.Unproject_InverseMVP(button.x + .5, viewport[3] - button.y + .5, 1, mvpi, viewport, oc)
 
 		LLL = {}
 		MMM = {}
@@ -492,6 +493,7 @@ local function Quit ()
 end
 
 local function DrawBoxAt (x, y, z, ext, color)
+if true then return end
 	local xmin, ymin, zmin, xmax, ymax, zmax = utils.CubeCorners(x, y, z, ext)
 
 	lines.Draw(xmin, ymin, zmin, xmax, ymin, zmin, color)
@@ -548,6 +550,10 @@ local function Test ()
 if MMM then
 	MC.BuildIsoSurface(mcw, aaa, fff, mc_func)
 	MMM=nil
+	DDD=(DDD or 0) + 1
+	if DDD == 5 then
+		v.off()
+	end
 else
 	mcsp:DrawBufferedElements(gl.GL_TRIANGLES, mc_state)
 end

@@ -127,7 +127,7 @@ local function GetColor (color)
 		return color
 	end
 
-	local out = Float4{1}
+	local out = Float4(1, 1, 1, 1)
 
 	if ffi.istype(Float3, color) then
 		ffi.copy(out, color, ffi.sizeof(Float3))
@@ -162,7 +162,7 @@ function M.Draw (x1, y1, z1, x2, y2, z2, color1, color2)
 	if color1 ~= nil then
 		Color[N * 2 + 0] = GetColor(color1)
 	else
-		Color[N * 2 + 0] = Float4{1}
+		Color[N * 2 + 0] = Float4(1, 1, 1, 1)
 	end
 
 	if color2 ~= nil then
@@ -192,7 +192,7 @@ function M.DrawTo (x, y, z, color)
 
 		prev_pos, prev_color = Pos[index], Color[index]
 	else
-		prev_pos, prev_color = Float3(), Float4{1}
+		prev_pos, prev_color = Float3(), Float4(1, 1, 1, 1)
 	end
 
 	M.Draw(prev_pos[0], prev_pos[1], prev_pos[2], x, y, z, prev_color, color)

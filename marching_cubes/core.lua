@@ -51,10 +51,7 @@ function M.BuildIsoSurface (walker, loader, polygonize, func, iso)
 		loader:Reset()
 
 		polygonize(cell, loader, iso)
-
-		for i = 0, #loader - 1, 3 do
-			func(loader, loader:GetIndex(i), loader:GetIndex(i + 1), loader:GetIndex(i + 2), i == 0)
-		end
+		func(loader)
 	end
 end
 

@@ -64,15 +64,15 @@ function M.NewStoreGroup (ncache)
 
 	--- DOCME
 	function StoreGroup.GetItem (id, index)
+		return group[id][index + 1]
+	end
+
+	--- DOCME
+	function StoreGroup.GetLastItem (id)
 		local store = group[id]
+		local count = #store
 
-		if index == true then
-			local count = #store
-
-			return store[count], count - 1
-		else
-			return store[index + 1]
-		end
+		return store[count], count - 1
 	end
 
 	--- DOCME
