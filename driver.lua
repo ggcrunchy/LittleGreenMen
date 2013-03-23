@@ -340,8 +340,8 @@ mcsp = shader_helper.NewShader{
 		NV, NI = 0, 0
 	end
 }
-local v = require("jit.v")
-v.start("Out.txt")
+--local v = require("jit.v")
+--v.start("Out.txt")
 mc_state = mcsp:SetupBuffers{
 	{
 		size = ffi.sizeof(VVV),
@@ -493,7 +493,7 @@ local function Quit ()
 end
 
 local function DrawBoxAt (x, y, z, ext, color)
-if true then return end
+--if true then return end
 	local xmin, ymin, zmin, xmax, ymax, zmax = utils.CubeCorners(x, y, z, ext)
 
 	lines.Draw(xmin, ymin, zmin, xmax, ymin, zmin, color)
@@ -550,10 +550,11 @@ local function Test ()
 if MMM then
 	MC.BuildIsoSurface(mcw, aaa, fff, mc_func)
 	MMM=nil
+--[[
 	DDD=(DDD or 0) + 1
 	if DDD == 5 then
 		v.off()
-	end
+	end]]
 else
 	mcsp:DrawBufferedElements(gl.GL_TRIANGLES, mc_state)
 end

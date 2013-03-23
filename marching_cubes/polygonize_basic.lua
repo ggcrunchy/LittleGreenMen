@@ -47,23 +47,18 @@ local M = {}
 local Merge = ffi.new("int[12]", { 0, 0, 0, 4, 0, 0, 0, 12, 13, 15, 13, 11 })
 
 --
-local function GetVertex (cell, loader, state, index)
-	if state.indices[index] == 0 then
-		state.indices[index] = loader.nverts + 1
+local function GetVertex (cell, loader, indices, index, iso)
+	if indices[index] == 0 then
+		indices[index] = loader.nverts + 1
 
-		loader:AddVertex(VertexInterp(cell, band(index, 7), bxor(index + 1, Merge[index]), state.iso))
+		loader:AddVertex(VertexInterp(cell, band(index, 7), bxor(index + 1, Merge[index]), iso))
 	end
 
-	loader:AddIndex(state.indices[index] - 1)
+	loader:AddIndex(indices[index] - 1)
 end
 
--- --
-local State = ffi.typeof[[
-	struct {
-		double iso; // Current isolevel
-		uint8_t indices[12]; // Which vertex does this [0, 12) index reference?
-	}
-]]
+-- Which vertex does this [0, 12) index reference? --
+local Indices = ffi.typeof("uint8_t[12]")
 
 --- DOCME
 -- Given a grid cell and an isolevel, calculate the triangular
@@ -87,12 +82,12 @@ function M.DoCell (cell, loader, iso)
 	cubeindex = bor(cubeindex, band(rshift(floor(cell.val[7] - iso), 24), 0x80))
 
 	-- Create the triangle
-	local state, index = State(iso), 0
+	local indices, index = Indices(), 0
 
 	while TriTable[cubeindex][index] ~= -1 do
-		GetVertex(cell, loader, state, TriTable[cubeindex][index + 0])
-		GetVertex(cell, loader, state, TriTable[cubeindex][index + 1])
-		GetVertex(cell, loader, state, TriTable[cubeindex][index + 2])
+		GetVertex(cell, loader, indices, TriTable[cubeindex][index + 0], iso)
+		GetVertex(cell, loader, indices, TriTable[cubeindex][index + 1], iso)
+		GetVertex(cell, loader, indices, TriTable[cubeindex][index + 2], iso)
 
 		index = index + 3
 	end
