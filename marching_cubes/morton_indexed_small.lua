@@ -101,7 +101,7 @@ local State = ffi.typeof([[
 		int32_t id; // ID used to maintain GC resources
 		int32_t cur_bin; // Current bin, which will be alloted from the newest block
 		double none; // "Missing" value
-		$ * descriptors[8]; // Descriptors for each 2K range of Morton numbers
+		$ * descriptors[32];//8]; // Descriptors for each 2K range of Morton numbers
 	}
 ]], Descriptor)
 
@@ -145,23 +145,25 @@ function MarchingCubes_MortonIndexedSmall:Next (cur)
 		elseif cur.in_use ~= 0 then
 			local flag = band(cur.in_use, -cur.in_use)
 			local offset = Lg_PowerOf2(flag)
-			local info = cur.desc.info[rshift(offset, 2)]
+local islot = rshift(offset, 2)
+local uslot = band(offset, 3)
+			local info = cur.desc.info[islot]
 			local block = Blocks.GetItem(self.id, rshift(info, 4))--info.block)
 	--		local to_slice = lshift(band(info, 15)--[[info.bin]], 7)
 local bin = band(info, 15)
-			cur.base = lshift(cur.desc_index - 1, 12) + lshift(offset, 7)
+			cur.base = lshift(cur.desc_index - 1, 10--[[12]]) + lshift(offset, 5)--7)
 			cur.in_use = cur.in_use - flag
 --			cur.used_arr = block.used[band(info, 15)]--info.bin]
-			cur.used = block.used[bin][band(offset, 3)]--cur.used_arr[0]
+			cur.used = block.used[bin][uslot]--cur.used_arr[0]
 --			cur.used_index = 1
 --			cur.values = block.values + bin--to_slice
 			cur.bbb = block
-			cur.iii = band(offset, 3)
+			cur.iii = uslot
 			cur.bin = bin
 
 		-- ...do the rest of the descriptors?
 		else
-			while cur.desc_index < 8 do
+			while cur.desc_index < 32 do--8 do
 				cur.desc = self.descriptors[cur.desc_index]
 				cur.desc_index = cur.desc_index + 1
 
@@ -173,21 +175,21 @@ local bin = band(info, 15)
 			end
 
 			-- Iteration complete.
-			if not (cur.desc_index < 8) then
+			if not (cur.desc_index < 32) then--8) then
 				return false
 			end
 		end
 	until false
 end
 
--- --
+-- --What'
 local Descriptors = data_structure_ops.NewStoreGroup(10)
 
 --- DOCME
 function MarchingCubes_MortonIndexedSmall:Reset ()
 	self.cur_bin = 0
 
-	for i = 0, 7 do
+	for i = 0, 31 do--7 do
 		self.descriptors[i] = nil
 	end
 
@@ -199,7 +201,7 @@ end
 function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
 	if common.WithinGrid(self, x, y, z) then
 		local morton = Morton3(x, y, z) -- In [0, 2^15)
-		local dslot = rshift(morton, 12) -- Bits 12-14: descriptor slot, in [0, 8)
+		local dslot = rshift(morton, 10)--12) -- Bits 12-14: descriptor slot, in [0, 8)
 
 		-- Get the descriptor (adding one, if necessary) for the 4K range in which the index resides.
 		local desc = self.descriptors[dslot]
@@ -213,9 +215,10 @@ function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
 		end
 
 		-- If necessary, allot the index's 128-element sub-range.
-		local islot = band(rshift(morton, 7), 31) -- Bits 7-11: slot in info table, in [0, 31)
+		local lslot = band(rshift(morton, 5--[[7]]), 31) -- Bits 7-11: slot in info table, in [0, 31)
+		local islot = rshift(lslot, 2)
 
-		if band(desc.in_use, lshift(15, band(islot, 28))) == 0 then--band(desc.in_use, lshift(1, islot)) == 0 then
+		if band(desc.in_use, lshift(15, band(lslot, 28))) == 0 then--band(desc.in_use, lshift(1, islot)) == 0 then
 --			local aa=band(desc.in_use, lshift(15, islot * 4))
 --			desc.in_use = bor(desc.in_use, lshift(1, islot))
 
@@ -234,18 +237,19 @@ function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
 			end
 
 			-- Prepare the slice for use.
-			desc.info[rshift(islot, 2)] = lshift(index, 4) + self.cur_bin
+			desc.info[islot] = lshift(index, 4) + self.cur_bin
 
-			ffi.fill(block.used + self.cur_bin, 16)
+		    ffi.fill(block.used[self.cur_bin], 16)
 
 			self.cur_bin = self.cur_bin + 1
 --end
 		end
-desc.in_use = bor(desc.in_use, lshift(1, islot))
+
+desc.in_use = bor(desc.in_use, lshift(1, lslot))
 		-- Assign the value and flag it as used.
 		local ioffset = band(morton, 127) -- Bits 0-6: offset in data bin, in [0, 128)
-		local uslot = band(islot, 3)--rshift(ioffset, 5) -- Bits 5-6: Sub-offset in slice usage, in [0, 4)
-		local block, bin = Blocks.GetItem(self.id, rshift(desc.info[rshift(islot, 2)], 4)), band(desc.info[rshift(islot, 2)], 15)
+		local uslot = band(lslot, 3)-- rshift(ioffset, 5) -- Bits 5-6: Sub-offset in slice usage, in [0, 4)
+		local block, bin = Blocks.GetItem(self.id, rshift(desc.info[islot], 4)), band(desc.info[islot], 15)
 
 		block.used[bin][uslot] = bor(block.used[bin][uslot], lshift(1, band(morton, 31))) -- Bits 0-4: Offset into slice usage, in [0, 31)
 		block.values[--[[lshift(bin, 7) + ]]bin][ioffset] = value -- bin * 128 + offset
@@ -272,20 +276,21 @@ local function TrySetCellCorner (mcp, cell, cur, dc, ci, i, j, k, index)
 
 	-- If the corner is already in the current data bin, grab its value directly.
 	if rshift(index - cur.base, 7) == 0 then
-		local uslot, uindex = band(ioffset, 3)--[[rshift(ioffset, 5)]], band(ioffset, 31)
+		local uslot, uindex = band(rshift(index, 5), 3)--[[rshift(ioffset, 5)]], band(ioffset, 31)
 
 		value = band(cur.bbb.used[cur.bin][uslot]--[[cur.used_arr[uslot]], lshift(1, uindex)) ~= 0 and cur.bbb.values[cur.bin][ioffset]
 
 	-- Otherwise, if the bin even exists, defer the assignment.
 	else
-		local desc = mcp.descriptors[rshift(index, 12)]
-		local islot = band(rshift(index, 7), 31)
+		local desc = mcp.descriptors[rshift(index, 10)]--12)]
+		local lslot = band(rshift(index, 5), 31)
+local islot = rshift(lslot, 2)
+local uslot = band(lslot, 3)
 
-		if desc ~= nil and band(desc.in_use, lshift(1, islot)) ~= 0 then
+		if desc ~= nil and band(desc.in_use, lshift(1, lslot)) ~= 0 then
 			dc.corner[dc.n].offset = ioffset
 			dc.corner[dc.n].ci = ci
-dc.corner[dc.n].o = band(islot, 3)
-islot = rshift(islot, 2)
+dc.corner[dc.n].o = uslot
 			dc.corner[dc.n].block = rshift(desc.info[islot], 4)
 			dc.corner[dc.n].bin = band(desc.info[islot], 15)
 
