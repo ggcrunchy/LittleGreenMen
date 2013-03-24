@@ -264,7 +264,7 @@ local mcw = MC.Init(Dim * DD, Dim * DD, Dim * DD)
 
 local MMM
 
-local VN, IN = 500 * 3, 700 * 3
+local VN, IN = 1000 * 3, 1700 * 3
 
 local f3 = ffi.typeof("float[3]")
 local f3a = ffi.typeof("$[?]", f3)
@@ -272,7 +272,7 @@ local f3a = ffi.typeof("$[?]", f3)
 local VVV = f3a(VN)
 local III = ffi.new("uint16_t[?]", IN)
 
-local mm = require("marching_cubes.polygonize_basic")
+local mm = require("marching_cubes.polygonize_tets")
 
 local nv, ni = mm.MaxAdded()
 local mcmvp = render_state.NewLazyMatrix()
@@ -340,8 +340,8 @@ mcsp = shader_helper.NewShader{
 		NV, NI = 0, 0
 	end
 }
---local v = require("jit.v")
---v.start("Out.txt")
+local v = require("jit.v")
+v.start("Out.txt")
 mc_state = mcsp:SetupBuffers{
 	{
 		size = ffi.sizeof(VVV),
@@ -549,12 +549,13 @@ local function Test ()
 	mcsp:Use()
 if MMM then
 	MC.BuildIsoSurface(mcw, aaa, fff, mc_func)
-	MMM=nil
---[[
+--	MMM=nil
+---[[
 	DDD=(DDD or 0) + 1
 	if DDD == 5 then
 		v.off()
-	end]]
+	end
+--]]
 else
 	mcsp:DrawBufferedElements(gl.GL_TRIANGLES, mc_state)
 end

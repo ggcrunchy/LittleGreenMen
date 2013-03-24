@@ -128,14 +128,17 @@ end
 
 --
 local function Draw (shader)
-	if shader._alocs ~= BoundLocs then
+	--
+	local alocs = shader._alocs
+
+	if alocs ~= BoundLocs then
 		Disable()
 
-		for _, aloc in ipairs(shader._alocs) do
-			gl.glEnableVertexAttribArray(aloc)
+		for i = 1, #alocs do
+			gl.glEnableVertexAttribArray(alocs[i])
 		end
 
-		BoundLocs = shader._alocs
+		BoundLocs = alocs
 	end
 
 -- TODO: Could do actual upload of uniforms here

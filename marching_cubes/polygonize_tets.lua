@@ -44,34 +44,34 @@ local VertexInterp = common.VertexInterp
 local M = {}
 
 --
-local function GetVertex (cell, loader, state, i1, i2)
+local function GetVertex (cell, loader, indices, i1, i2, iso)
 	local index = lshift(i1, 3) + i2
 
-	if state.indices[index] == 0 then
-		state.indices[index] = loader.nverts + 1
+	if indices[index] == 0 then
+		indices[index] = loader:GetVertexCount() + 1
 
-		loader:AddVertex(VertexInterp(cell, i1, i2, state.iso))
+		loader:AddVertex(VertexInterp(cell, i1, i2, iso))
 	end
 
-	loader:AddIndex(state.indices[index] - 1)
+	loader:AddIndex(indices[index] - 1)
 end
 
 --
-local function BuildTriangle (cell, loader, state, a1, a2, b1, b2, c1, c2)
-	GetVertex(cell, loader, state, a1, a2)
-	GetVertex(cell, loader, state, b1, b2)
-	GetVertex(cell, loader, state, c1, c2)
+local function BuildTriangle (cell, loader, indices, a1, a2, b1, b2, c1, c2, iso)
+	GetVertex(cell, loader, indices, a1, a2, iso)
+	GetVertex(cell, loader, indices, b1, b2, iso)
+	GetVertex(cell, loader, indices, c1, c2, iso)
 end
 
 --
-local function BuildAndJoin (cell, loader, state, a1, a2, pi1, pi2)
-	local pbase = loader.nindices - 3
+local function BuildAndJoin (cell, loader, indices, a1, a2, pi1, pi2, iso)
+	local pbase = #loader - 3
 
-	loader:AddIndex(loader.indices[pbase + pi1])
+	loader:AddIndex(loader:GetIndex(pbase + pi1))
 
-	GetVertex(cell, loader, state, a1, a2)
+	GetVertex(cell, loader, indices, a1, a2, iso)
 
-	loader:AddIndex(loader.indices[pbase + pi2])
+	loader:AddIndex(loader:GetIndex(pbase + pi2))
 end
 
 --[[
@@ -100,14 +100,14 @@ end
    up the grid cell.
 ]]
 -- TODO: Investigate Graphics Gems 3 article... mentioned only generating new vertices for 3, 1, 8?
-local function DoTri (cell, loader, state, v0, v1, v2, v3)
+local function DoTri (cell, loader, indices, v0, v1, v2, v3, iso)
 	-- Determine which of the 16 cases we have given which vertices
 	-- are above or below the isosurface
-	local tindex = rshift(floor(cell.val[v0] - state.iso), 31)
+	local tindex = rshift(floor(cell.val[v0] - iso), 31)
 
-	tindex = bor(tindex, band(rshift(floor(cell.val[v1] - state.iso), 30), 2))
-	tindex = bor(tindex, band(rshift(floor(cell.val[v2] - state.iso), 29), 4))
-	tindex = bor(tindex, band(rshift(floor(cell.val[v3] - state.iso), 28), 8))
+	tindex = bor(tindex, band(rshift(floor(cell.val[v1] - iso), 30), 2))
+	tindex = bor(tindex, band(rshift(floor(cell.val[v2] - iso), 29), 4))
+	tindex = bor(tindex, band(rshift(floor(cell.val[v3] - iso), 28), 8))
 
 	-- Form the vertices of the triangles for each case	
 	tindex = min(tindex, 0xF - tindex)
@@ -115,43 +115,38 @@ local function DoTri (cell, loader, state, v0, v1, v2, v3)
 	if tindex == 0 then
 		return
 	elseif tindex == 1 then
-		BuildTriangle(cell, loader, state, v0, v1, v0, v2, v0, v3)
+		BuildTriangle(cell, loader, indices, v0, v1, v0, v2, v0, v3, iso)
 	elseif tindex == 2 then
-		BuildTriangle(cell, loader, state, v1, v0, v1, v3, v1, v2)
+		BuildTriangle(cell, loader, indices, v1, v0, v1, v3, v1, v2, iso)
 	elseif tindex == 3 then
-		BuildTriangle(cell, loader, state, v0, v3, v0, v2, v1, v3)
-		BuildAndJoin(cell, loader, state, v1, v2, 2, 1)
+		BuildTriangle(cell, loader, indices, v0, v3, v0, v2, v1, v3, iso)
+		BuildAndJoin(cell, loader, indices, v1, v2, 2, 1, iso)
 	elseif tindex == 4 then
-		BuildTriangle(cell, loader, state, v2, v0, v2, v1, v2, v3)
+		BuildTriangle(cell, loader, indices, v2, v0, v2, v1, v2, v3, iso)
 	elseif tindex == 5 then
-		BuildTriangle(cell, loader, state, v0, v1, v2, v3, v0, v3)
-		BuildAndJoin(cell, loader, state, v1, v2, 0, 1)
+		BuildTriangle(cell, loader, indices, v0, v1, v2, v3, v0, v3, iso)
+		BuildAndJoin(cell, loader, indices, v1, v2, 0, 1, iso)
 	elseif tindex == 6 then
-		BuildTriangle(cell, loader, state, v0, v1, v1, v3, v2, v3)
-		BuildAndJoin(cell, loader, state, v0, v2, 0, 2)
+		BuildTriangle(cell, loader, indices, v0, v1, v1, v3, v2, v3, iso)
+		BuildAndJoin(cell, loader, indices, v0, v2, 0, 2, iso)
 	elseif tindex == 7 then
-		BuildTriangle(cell, loader, state, v3, v0, v3, v2, v3, v1)
+		BuildTriangle(cell, loader, indices, v3, v0, v3, v2, v3, v1, iso)
 	end
 end
 
--- --
-local State = ffi.typeof[[
-	struct {
-		double iso; // Current isolevel
-		uint8_t indices[64]; // Which vertex does the [0, 8), [0, 8) index pair reference?
-	}
-]]
+-- Which vertex does the [0, 8), [0, 8) index pair reference? --
+local Indices = ffi.typeof("uint8_t[64]")
 
 --- DOCME
 function M.DoCell (cell, loader, iso)
-	local state = State(iso)
+	local indices = Indices()
 
-	DoTri(cell, loader, state, 0, 2, 3, 7)
-	DoTri(cell, loader, state, 0, 2, 6, 7)
-	DoTri(cell, loader, state, 0, 4, 6, 7)
-	DoTri(cell, loader, state, 0, 6, 1, 2)
-	DoTri(cell, loader, state, 0, 6, 1, 4)
-	DoTri(cell, loader, state, 5, 6, 1, 4)
+	DoTri(cell, loader, indices, 0, 2, 3, 7, iso)
+	DoTri(cell, loader, indices, 0, 2, 6, 7, iso)
+	DoTri(cell, loader, indices, 0, 4, 6, 7, iso)
+	DoTri(cell, loader, indices, 0, 6, 1, 2, iso)
+	DoTri(cell, loader, indices, 0, 6, 1, 4, iso)
+	DoTri(cell, loader, indices, 5, 6, 1, 4, iso)
 end
 
 --- DOCME

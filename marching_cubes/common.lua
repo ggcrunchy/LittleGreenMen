@@ -116,6 +116,11 @@ function VertexLoaderBasic:GetIndex (pos)
 end
 
 --- DOCME
+function VertexLoaderBasic:GetVertexCount ()
+	return self.nverts
+end
+
+--- DOCME
 function VertexLoaderBasic:Reset ()
 	self.nverts, self.nindices = 0, 0
 end

@@ -45,7 +45,11 @@
 ]===========================================================================]
 
 -- Standard library imports --
+local band = bit.band
+local bor = bit.bor
+local floor = math.floor
 local max = math.max
+local rshift = bit.rshift
 local sqrt = math.sqrt
 
 -- Modules --
@@ -71,11 +75,10 @@ ffi.cdef[[
 		OMP, OPM, OPP, MOM, MOP, POM, POP, MMO, MPO, PMO, PPO
 	};
 
-	typedef struct {       
-		//common variables
-		double x, y, z;          // ray origin   
-		double i, j, k;          // ray direction        
-		double ii, ij, ik;       // inverses of direction components
+	typedef struct {
+		double x, y, z; // ray origin   
+		double i, j, k; // ray direction        
+		double ii, ij, ik; // inverses of direction components
 
 		// ray slope
 		enum CLASSIFICATION classification;
@@ -84,6 +87,10 @@ ffi.cdef[[
 		double c_xy, c_xz, c_yx, c_yz, c_zx, c_zy;       
 	} Ray_t;
 ]]
+
+-- TODO: turn CLASSIFICATION into the magic numbers
+-- Include some notes about how to derive them
+-- Put them in (commented-out) stuff in Slope
 
 --- DOCME
 -- @number x0
@@ -100,7 +107,10 @@ function M.MakeAABox (x0, y0, z0, x1, y1, z1)
 
 	return ffi.new("AABox_t", x0, x1, y0, y1, z0, z1)
 end
-local ls = bit.lshift
+-- TODO: Work these all out and just embed the constants
+local function ls (magic, id)
+	return magic + bit.lshift(id, 9)
+end
 --- DOCME
 -- @number x
 -- @number y
@@ -127,22 +137,23 @@ function M.MakeRay (x, y, z, i, j, k)
 	ray.c_zy = y - ray.jbyk * z
 
 	-- ray slope classification
+	-- TODO: Is there a more elegant way?
 	if i < 0 then
 		if j < 0 then
 			if k < 0 then
 				ray.classification = "MMM"
-				ray.info = ls(504, 3)
+				ray.info = ls(0x1F8, 1)
 			elseif k > 0 then
 				ray.classification = "MMP"
-				ray.info = ls(316, 3) + 4
-			else -- k >= 0
+				ray.info = ls(0x13C, 1)
+			else
 				ray.classification = "MMO"
             end
-		else -- j >= 0)
+		else -- j >= 0
 			if k < 0 then
 				ray.classification = j == 0 and "MOM" or "MPM"
 				if j ~= 0 then
-					ray.info = ls(466, 3) + 2
+					ray.info = ls(0x1D2, 1)
 				end
 			else -- k >= 0
 				if j == 0 and k == 0 then
@@ -153,7 +164,7 @@ function M.MakeRay (x, y, z, i, j, k)
 					ray.classification = "MOP"
 				else
 					ray.classification = "MPP"
-					ray.info = ls(278, 3) + 6
+					ray.info = ls(0x116, 1)
 				end
 			end
 		end
@@ -162,7 +173,7 @@ function M.MakeRay (x, y, z, i, j, k)
 			if k < 0 then
 				ray.classification = i == 0 and "OMM" or "PMM"
 				if i ~=0 then
-					ray.info = ls(233, 3) + 1
+					ray.info = ls(0x0E9, 1)
 				end
 			else -- k >= 0
 				if i == 0 and k == 0 then
@@ -173,7 +184,7 @@ function M.MakeRay (x, y, z, i, j, k)
 					ray.classification = "OMP"
 				else
 					ray.classification = "PMP"
-					ray.info = ls(45, 3) + 5
+					ray.info = ls(0x02D, 1)
 				end
 			end
         else -- j >= 0
@@ -186,7 +197,7 @@ function M.MakeRay (x, y, z, i, j, k)
 					ray.classification = "POM"
 				else
 					ray.classification = "PPM"
-					ray.info = ls(195, 3) + 3
+					ray.info = ls(0x0C3, 1)
 				end
 			else -- k >= 0
 				if i == 0 then
@@ -206,7 +217,7 @@ function M.MakeRay (x, y, z, i, j, k)
 						ray.classification = "PPO"
 					else
                         ray.classification = "PPP"
-                        ray.info = ls(7, 3) + 7
+                        ray.info = ls(0x007, 1)
 					end
 				end
 			end
@@ -230,6 +241,37 @@ function M.MakeRayTo (x1, y1, z1, x2, y2, z2)
 
 	return M.MakeRay(x1, y1, z1, dx / len, dy / len, dz / len)
 end
+
+-- --
+local Pack = {
+	-- 1: XYZ --
+	function(ray, box)
+		local ix = band(ray.info, 0x1)
+		local iy = band(rshift(ray.info, 1), 0x1)
+		local iz = band(rshift(ray.info, 2), 0x1)
+
+		local x1 = box.xx[ix]
+		local y1 = box.yy[iy]
+		local z1 = box.zz[iz]
+
+		local c1 = rshift(floor(ray.x - x1), 31)
+		local c2 = band(rshift(floor(ray.y - y1), 30), 0x2)
+		local c3 = band(rshift(floor(ray.z - z1), 29), 0x4)
+		
+		local x2 = box.xx[1 - ix]
+		local y2 = box.yy[1 - iy]
+		local z2 = box.zz[1 - iz]
+		
+		local c4 = band(rshift(floor(ray.jbyi * x1 - y2 + ray.c_xy), 28), 0x008)
+		local c5 = band(rshift(floor(ray.ibyj * y1 - x2 + ray.c_yx), 27), 0x010)
+		local c6 = band(rshift(floor(ray.jbyk * z1 - y2 + ray.c_zy), 26), 0x020)
+		local c7 = band(rshift(floor(ray.kbyj * y1 - z2 + ray.c_yz), 25), 0x040)
+		local c8 = band(rshift(floor(ray.kbyi * x1 - z2 + ray.c_xz), 24), 0x080)
+		local c9 = band(rshift(floor(ray.ibyk * z1 - x2 + ray.c_zx), 23), 0x100)
+
+		return bor(c1, c2, c3, c4, c5, c6, c7, c8, c9)
+	end
+}
 
 --- DOCME
 -- @tparam Ray_t ray
@@ -464,43 +506,25 @@ function M.Slope (ray, box)
 	end
 
 	return true
+--[[
+	TODO: See notes in SlopeInt...
+	local packet = Pack[rshift(ray.info, 9)](ray, box)
+
+	return packet == band(ray.info, 0x1FF)
+]]
 end
 
-local rshift = bit.rshift
-local floor = math.floor
-local band = bit.band
-local bor = bit.bor
+-- --
+local Intersect = {
+	-- 1: XYZ --
+	function(ray, box)
+		local ix = band(ray.info, 0x1)
+		local iy = band(rshift(ray.info, 1), 0x1)
+		local iz = band(rshift(ray.info, 2), 0x1)
 
-local function Pack (ray, box)
-	local i1 = band(ray.info, 1)
-	local i2 = band(rshift(ray.info, 1), 1)
-	local i3 = band(rshift(ray.info, 2), 1)
-
-	local xa = box.xx[i1]
-	local ya = box.yy[i2]
-	local za = box.zz[i3]
-
-	local c1 = rshift(floor(ray.x - xa), 31)
-	local c2 = band(rshift(floor(ray.y - ya), 30), 2)
-	local c3 = band(rshift(floor(ray.z - za), 29), 4)
-	
-	local xb = box.xx[1 - i1]
-	local yb = box.yy[1 - i2]
-	local zb = box.zz[1 - i3]
-	
-	local c4 = band(rshift(floor(ray.jbyi * xa - yb + ray.c_xy), 28), 8)
-	local c5 = band(rshift(floor(ray.ibyj * ya - xb + ray.c_yx), 27), 16)
-	local c6 = band(rshift(floor(ray.jbyk * za - yb + ray.c_zy), 26), 32)
-	local c7 = band(rshift(floor(ray.kbyj * ya - zb + ray.c_yz), 25), 64)
-	local c8 = band(rshift(floor(ray.kbyi * xa - zb + ray.c_xz), 24), 128)
-	local c9 = band(rshift(floor(ray.ibyk * za - xb + ray.c_zx), 23), 256)
-
-	if bor(c1, c2, c3, c4, c5, c6, c7, c8, c9) ~= rshift(ray.info, 3) then
-		return false
-	else
-		return true, max((xb - ray.x) * ray.ii, (yb - ray.y) * ray.ij, (zb - ray.z) * ray.ik)
+		return max((box.xx[1 - ix] - ray.x) * ray.ii, (box.yy[1 - iy] - ray.y) * ray.ij, (box.zz[1 - iz] - ray.z) * ray.ik)
 	end
-end
+}
 
 --- DOCME
 -- @tparam Ray_t ray
@@ -510,137 +534,135 @@ end
 function M.SlopeInt (ray, box)
 	local t
 --[=[
-    if ray.classification == "MMM" then
-    --[[
-		if ray.x < box.x0 or ray.y < box.y0 or ray.z < box.z0 or
-			ray.jbyi * box.x0 - box.y1 + ray.c_xy > 0 or
-			ray.ibyj * box.y0 - box.x1 + ray.c_yx > 0 or
-			ray.jbyk * box.z0 - box.y1 + ray.c_zy > 0 or
-			ray.kbyj * box.y0 - box.z1 + ray.c_yz > 0 or
-			ray.kbyi * box.x0 - box.z1 + ray.c_xz > 0 or
-			ray.ibyk * box.z0 - box.x1 + ray.c_zx > 0 then
-		]]
-		return Pack(ray, box, 0+0+0--[[box.x0, box.y0, box.z0]], 8 + 16 + 32 + 64 + 128 + 256) --[[then
+	-- XYZ (group 1):
+
+    if ray.classification == "MMM" then -- 111 111 000 -> 0x1F8
+		if ray.x < box.x0 or ray.y < box.y0 or ray.z < box.z0 or -- 000
+			ray.jbyi * box.x0 - box.y1 + ray.c_xy > 0 or -- 1
+			ray.ibyj * box.y0 - box.x1 + ray.c_yx > 0 or -- 1
+			ray.jbyk * box.z0 - box.y1 + ray.c_zy > 0 or -- 1
+			ray.kbyj * box.y0 - box.z1 + ray.c_yz > 0 or -- 1
+			ray.kbyi * box.x0 - box.z1 + ray.c_xz > 0 or -- 1
+			ray.ibyk * box.z0 - box.x1 + ray.c_zx > 0 then -- 1
 			return false
 		end
 
 		t = max((box.x1 - ray.x) * ray.ii, (box.y1 - ray.y) * ray.ij, (box.z1 - ray.z) * ray.ik)
-]]
-	elseif ray.classification == "MMP" then
---[[
-		if ray.x < box.x0 or ray.y < box.y0 or ray.z > box.z1 or
-			ray.jbyi * box.x0 - box.y1 + ray.c_xy > 0 or
-			ray.ibyj * box.y0 - box.x1 + ray.c_yx > 0 or
-			ray.jbyk * box.z1 - box.y1 + ray.c_zy > 0 or
-			ray.kbyj * box.y0 - box.z0 + ray.c_yz < 0 or
-			ray.kbyi * box.x0 - box.z0 + ray.c_xz < 0 or
-			ray.ibyk * box.z1 - box.x1 + ray.c_zx > 0 then]]
-		return Pack(ray, box, 0+0+4--[[box.x0, box.y0, box.z1]], 4 + 8 + 16 + 32 + 256) --[[then
+
+	elseif ray.classification == "MMP" then -- 100 111 100 -> 0x13C
+		if ray.x < box.x0 or ray.y < box.y0 or ray.z > box.z1 or -- 001
+			ray.jbyi * box.x0 - box.y1 + ray.c_xy > 0 or -- 1
+			ray.ibyj * box.y0 - box.x1 + ray.c_yx > 0 or -- 1
+			ray.jbyk * box.z1 - box.y1 + ray.c_zy > 0 or -- 1
+			ray.kbyj * box.y0 - box.z0 + ray.c_yz < 0 or -- 0
+			ray.kbyi * box.x0 - box.z0 + ray.c_xz < 0 or -- 0
+			ray.ibyk * box.z1 - box.x1 + ray.c_zx > 0 then -- 1
 			return false
 		end
 
 		t = max((box.x1 - ray.x) * ray.ii, (box.y1 - ray.y) * ray.ij, (box.z0 - ray.z) * ray.ik)
-]]
-	elseif ray.classification == "MPM" then
---[[
-		if ray.x < box.x0 or ray.y > box.y1 or ray.z < box.z0 or
-			ray.jbyi * box.x0 - box.y0 + ray.c_xy < 0 or
-			ray.ibyj * box.y1 - box.x1 + ray.c_yx > 0 or
-			ray.jbyk * box.z0 - box.y0 + ray.c_zy < 0 or
-			ray.kbyj * box.y1 - box.z1 + ray.c_yz > 0 or
-			ray.kbyi * box.x0 - box.z1 + ray.c_xz > 0 or
-			ray.ibyk * box.z0 - box.x1 + ray.c_zx > 0 then
-			]]
-			return Pack(ray, box, 0+2+0--[[box.x0, box.y1, box.z0]], 2 + 16 + 64 + 128 + 256) --[[then
+
+	elseif ray.classification == "MPM" then -- 111 010 010 -> 0x1D2
+		if ray.x < box.x0 or ray.y > box.y1 or ray.z < box.z0 or -- 010
+			ray.jbyi * box.x0 - box.y0 + ray.c_xy < 0 or -- 0
+			ray.ibyj * box.y1 - box.x1 + ray.c_yx > 0 or -- 1
+			ray.jbyk * box.z0 - box.y0 + ray.c_zy < 0 or -- 0
+			ray.kbyj * box.y1 - box.z1 + ray.c_yz > 0 or -- 1
+			ray.kbyi * box.x0 - box.z1 + ray.c_xz > 0 or -- 1
+			ray.ibyk * box.z0 - box.x1 + ray.c_zx > 0 then -- 1
 			return false
 		end
 
 		t = max((box.x1 - ray.x) * ray.ii, (box.y0 - ray.y) * ray.ij, (box.z1 - ray.z) * ray.ik)
-]]
-	elseif ray.classification == "MPP" then
-	--[[
-		if ray.x < box.x0 or ray.y > box.y1 or ray.z > box.z1 or
-			ray.jbyi * box.x0 - box.y0 + ray.c_xy < 0 or
-			ray.ibyj * box.y1 - box.x1 + ray.c_yx > 0 or
-			ray.jbyk * box.z1 - box.y0 + ray.c_zy < 0 or
-			ray.kbyj * box.y1 - box.z0 + ray.c_yz < 0 or
-			ray.kbyi * box.x0 - box.z0 + ray.c_xz < 0 or
-			ray.ibyk * box.z1 - box.x1 + ray.c_zx > 0 then
-			]]
-		return Pack(ray, box, 0+2+4--[[box.x0, box.y1, box.z1]], 2 + 4 + 16 + 256) --[[then
+
+	elseif ray.classification == "MPP" then -- 100 010 110 -> 0x116
+		if ray.x < box.x0 or ray.y > box.y1 or ray.z > box.z1 or -- 011
+			ray.jbyi * box.x0 - box.y0 + ray.c_xy < 0 or -- 0
+			ray.ibyj * box.y1 - box.x1 + ray.c_yx > 0 or -- 1
+			ray.jbyk * box.z1 - box.y0 + ray.c_zy < 0 or -- 0
+			ray.kbyj * box.y1 - box.z0 + ray.c_yz < 0 or -- 0
+			ray.kbyi * box.x0 - box.z0 + ray.c_xz < 0 or -- 0
+			ray.ibyk * box.z1 - box.x1 + ray.c_zx > 0 then -- 1
 			return false
 		end
 
 		t = max((box.x1 - ray.x) * ray.ii, (box.y0 - ray.y) * ray.ij, (box.z0 - ray.z) * ray.ik)
-]]
-	elseif ray.classification == "PMM" then
-	--[[
-		if ray.x > box.x1 or ray.y < box.y0 or ray.z < box.z0 or
-			ray.jbyi * box.x1 - box.y1 + ray.c_xy > 0 or
-			ray.ibyj * box.y0 - box.x0 + ray.c_yx < 0 or
-			ray.jbyk * box.z0 - box.y1 + ray.c_zy > 0 or
-			ray.kbyj * box.y0 - box.z1 + ray.c_yz > 0 or
-			ray.kbyi * box.x1 - box.z1 + ray.c_xz > 0 or
-			ray.ibyk * box.z0 - box.x0 + ray.c_zx < 0 then
-		]]
-		return Pack(ray, box, 1+0+0--[[box.x1, box.y0, box.z0]], 1 + 8 + 32 + 64 + 128) --[[then
+
+	elseif ray.classification == "PMM" then -- 011 101 001 -> 0x0E9
+		if ray.x > box.x1 or ray.y < box.y0 or ray.z < box.z0 or -- 100
+			ray.jbyi * box.x1 - box.y1 + ray.c_xy > 0 or -- 1
+			ray.ibyj * box.y0 - box.x0 + ray.c_yx < 0 or -- 0
+			ray.jbyk * box.z0 - box.y1 + ray.c_zy > 0 or -- 1
+			ray.kbyj * box.y0 - box.z1 + ray.c_yz > 0 or -- 1
+			ray.kbyi * box.x1 - box.z1 + ray.c_xz > 0 or -- 1
+			ray.ibyk * box.z0 - box.x0 + ray.c_zx < 0 then -- 0
 			return false
 		end
 
 		t = max((box.x0 - ray.x) * ray.ii, (box.y1 - ray.y) * ray.ij, (box.z1 - ray.z) * ray.ik)
-]]
-	elseif ray.classification == "PMP" then
-	--[[
-		if ray.x > box.x1 or ray.y < box.y0 or ray.z > box.z1 or
-			ray.jbyi * box.x1 - box.y1 + ray.c_xy > 0 or
-			ray.ibyj * box.y0 - box.x0 + ray.c_yx < 0 or
-			ray.jbyk * box.z1 - box.y1 + ray.c_zy > 0 or
-			ray.kbyj * box.y0 - box.z0 + ray.c_yz < 0 or
-			ray.kbyi * box.x1 - box.z0 + ray.c_xz < 0 or
-			ray.ibyk * box.z1 - box.x0 + ray.c_zx < 0 then
-		]]
-		return Pack(ray, box, 1+0+4--[[box.x1, box.y0, box.z1]], 1 + 4 + 8 + 32) --[[then
+
+	elseif ray.classification == "PMP" then -- 000 101 101 -> 0x02D
+		if ray.x > box.x1 or ray.y < box.y0 or ray.z > box.z1 or -- 101
+			ray.jbyi * box.x1 - box.y1 + ray.c_xy > 0 or -- 1
+			ray.ibyj * box.y0 - box.x0 + ray.c_yx < 0 or -- 0
+			ray.jbyk * box.z1 - box.y1 + ray.c_zy > 0 or -- 1
+			ray.kbyj * box.y0 - box.z0 + ray.c_yz < 0 or -- 0
+			ray.kbyi * box.x1 - box.z0 + ray.c_xz < 0 or -- 0
+			ray.ibyk * box.z1 - box.x0 + ray.c_zx < 0 then -- 0
 			return false
 		end
 
 		t = max((box.x0 - ray.x) * ray.ii, (box.y1 - ray.y) * ray.ij, (box.z0 - ray.z) * ray.ik)
-]]
-	elseif ray.classification == "PPM" then
-	--[[
-		if ray.x > box.x1 or ray.y > box.y1 or ray.z < box.z0 or
-			ray.jbyi * box.x1 - box.y0 + ray.c_xy < 0 or
-			ray.ibyj * box.y1 - box.x0 + ray.c_yx < 0 or
-			ray.jbyk * box.z0 - box.y0 + ray.c_zy < 0 or
-			ray.kbyj * box.y1 - box.z1 + ray.c_yz > 0 or
-			ray.kbyi * box.x1 - box.z1 + ray.c_xz > 0 or
-			ray.ibyk * box.z0 - box.x0 + ray.c_zx < 0 then
-		]]
-		return Pack(ray, box, 1+2+0--[[box.x1, box.y1, box.z0]], 1 + 2 + 64 + 128) --[[then
+
+	elseif ray.classification == "PPM" then -- 011 000 011 -> 0x0C3
+		if ray.x > box.x1 or ray.y > box.y1 or ray.z < box.z0 or -- 110
+			ray.jbyi * box.x1 - box.y0 + ray.c_xy < 0 or -- 0
+			ray.ibyj * box.y1 - box.x0 + ray.c_yx < 0 or -- 0
+			ray.jbyk * box.z0 - box.y0 + ray.c_zy < 0 or -- 0
+			ray.kbyj * box.y1 - box.z1 + ray.c_yz > 0 or -- 1
+			ray.kbyi * box.x1 - box.z1 + ray.c_xz > 0 or -- 1
+			ray.ibyk * box.z0 - box.x0 + ray.c_zx < 0 then -- 0
 			return false
 		end
 
 		t = max((box.x0 - ray.x) * ray.ii, (box.y0 - ray.y) * ray.ij, (box.z1 - ray.z) * ray.ik)
-]]
-	elseif ray.classification == "PPP" then
-	--[[
-		if ray.x > box.x1 or ray.y > box.y1 or ray.z > box.z1 or
-			ray.jbyi * box.x1 - box.y0 + ray.c_xy < 0 or
-			ray.ibyj * box.y1 - box.x0 + ray.c_yx < 0 or
-			ray.jbyk * box.z1 - box.y0 + ray.c_zy < 0 or
-			ray.kbyj * box.y1 - box.z0 + ray.c_yz < 0 or
-			ray.kbyi * box.x1 - box.z0 + ray.c_xz < 0 or
-			ray.ibyk * box.z1 - box.x0 + ray.c_zx < 0 then
-		]]
-		return Pack(ray, box, 1+2+4--[[box.x1, box.y1, box.z1]], 1 + 2 + 4) --[[then
+
+	elseif ray.classification == "PPP" then -- 000 000 111 -> 0x007
+		if ray.x > box.x1 or ray.y > box.y1 or ray.z > box.z1 or -- 111
+			ray.jbyi * box.x1 - box.y0 + ray.c_xy < 0 or -- 0
+			ray.ibyj * box.y1 - box.x0 + ray.c_yx < 0 or -- 0
+			ray.jbyk * box.z1 - box.y0 + ray.c_zy < 0 or -- 0
+			ray.kbyj * box.y1 - box.z0 + ray.c_yz < 0 or -- 0
+			ray.kbyi * box.x1 - box.z0 + ray.c_xz < 0 or -- 0
+			ray.ibyk * box.z1 - box.x0 + ray.c_zx < 0 then -- 0
 			return false
 		end
 
 		t = max((box.x0 - ray.x) * ray.ii, (box.y0 - ray.y) * ray.ij, (box.z0 - ray.z) * ray.ik)
-]]
 ]=]
-	if ray.info ~= 0 then
-		return Pack(ray, box)
+--[[
+	TODO:
+	local index = band(rshift(ray.info, 3), 0x7)
+	local packet = Slope[index](ray, box, band(ray.info, 0x7))
+	if packet ~= rshift(ray.info, 6) then
+		return false
+	else
+		return true[, Intersection[index](ray, box, band(ray.info, 0x7)] -- in SlopeInt case
+	end
+]]
 
+	if ray.info ~= 0 then -- 3 bits to distinguish 7 cases? (0-2 = indices, 3-5 = case, 6-n, n <= 31 = magic number)
+-- TODO: Are indices always part of magic number? If so, then 0-8 = packet, 9-11 = case
+		local index = rshift(ray.info, 9)
+		local packet = Pack[index](ray, box)--, band(ray.info, 0x7))
+
+		if packet ~= band(ray.info, 0x1FF) then
+			return false
+		else
+			return true, Intersect[index](ray, box)--, band(ray.info, 0x7))
+		end
+
+-- begin YZ...
 	elseif ray.classification == "OMM" then
 		if ray.x < box.x0 or ray.x > box.x1 or
 			ray.y < box.y0 or ray.z < box.z0 or
@@ -680,7 +702,7 @@ function M.SlopeInt (ray, box)
 		end
 
 		t = max((box.y0 - ray.y) * ray.ij, (box.z0 - ray.z) * ray.ik)
-
+-- begin XZ...
 	elseif ray.classification == "MOM" then
 		if ray.y < box.y0 or ray.y > box.y1 or
 			ray.x < box.x0 or ray.z < box.z0 or
@@ -720,7 +742,7 @@ function M.SlopeInt (ray, box)
 		end
 
 		t = max((box.x0 - ray.x) * ray.ii, (box.z0 - ray.z) * ray.ik)
-
+-- begin XY...
 	elseif ray.classification == "MMO" then
 		if ray.z < box.z0 or ray.z > box.z1 or
 			ray.x < box.x0 or ray.y < box.y0 or
@@ -760,7 +782,7 @@ function M.SlopeInt (ray, box)
 		end
 
 		t = max((box.x0 - ray.x) * ray.ii, (box.y0 - ray.y) * ray.ij)
-
+-- begin X...
 	elseif ray.classification == "MOO" then
 		if ray.x < box.x0 or
 			ray.y < box.y0 or ray.y > box.y1 or
@@ -778,7 +800,7 @@ function M.SlopeInt (ray, box)
 		end
 
 		t = (box.x0 - ray.x) * ray.ii
-
+-- begin Y...
 	elseif ray.classification == "OMO" then
 		if ray.y < box.y0 or
 			ray.x < box.x0 or ray.x > box.x1 or
@@ -796,7 +818,7 @@ function M.SlopeInt (ray, box)
 		end
 
 		t = (box.y0 - ray.y) * ray.ij
-
+-- begin Z...
 	elseif ray.classification == "OOM" then
 		if ray.z < box.z0 or
 			ray.x < box.x0 or ray.x > box.x1 or
