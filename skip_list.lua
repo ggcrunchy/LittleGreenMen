@@ -26,87 +26,153 @@
 -- Standard library imports --
 local random = math.random
 
+-- Modules --
+local ffi = require("ffi")
+
+-- Exports --
+local M = {}
+
 -- --
-local Node = ffi.typeof[[
+ffi.cdef[[
 	struct _SkipListNode {
 		int n;
 		$ data;
 		struct _SkipListNode * next[?];
-	}
+	};
 ]]
 
--- --
-local Max = {} -- contains inf or nan
+local Node = ffi.typeof("_SkipListNode")
 
+--- DOCME
 function M.FindNode (head, value)
-	local node, i = head, head.n - 1
+	local node = head
 
-	while i >= 0 do
+	for i = head.n - 1, 0, -1 do
 		local next = node.next[i]
 
-		if next.data < value then
-			node = next
-		elseif next.data == value then
+        while next.data < value do
+            node, next = next, next.next[i]
+        end
+
+		if next.data == value then
 			return next
-		else
-			i = i - 1
 		end
 	end
 
 	return nil
 end
 
-local function FindMaxNodeBefore (head, value)
-	local node, i = head, head.n - 1
+-- --
+local PrevNodes
 
-	while true do
+--
+local function FindMaxNodesLessThan (head, value)
+	local node = head
+
+	for i = head.n - 1, 0, -1 do
 		local next = node.next[i]
 
-		if next.data < value then
-			node = next
-		else
-			return node
-		end
+        while next.data < value do
+            node, next = next, next.next[i]
+        end
+
+        PrevNodes[i] = node
 	end
 end
 
+--- DOCME
 function M.InsertValue (head, value)
-	-- allocate, random(head.n) slots
-	
+	FindMaxNodesLessThan(head, value)
+
+	local n = random(head.n)
+	local node = Node(n, n)
 	local prev = FindMaxNodeBefore(head, value)
 
-	-- stich slots 0 to n - 1
-	-- return node
+	for i = 0, n - 1 do
+		PrevNodes[i].next[i], node.next[i] = node, PrevNodes[i].next[i]
+	end
+
+	return node
 end
 
+-- --
+local Inf = Node(1, 0, 1 / 0)
+
+--- DOCME
 function M.NewList (n)
-	-- allocate n slots
-	-- stitch to "infinity" list
+    local head = Node(n, n)
 
-	-- return list
+	--
+    for i = 0, n - 1 do
+        head.next[i] = Inf
+    end
+
+	--
+    if PrevNodes == nil or PrevNodes.n < n then
+        PrevNodes = Node(1, n)
+    end
+
+	return head
 end
 
+--- DOCME
+-- N.B. node is assumed to exist!
 function M.RemoveNode (head, node)
-	local prev, n = FindMaxNodeBefore(head, node:GetValue()), node.n
+    FindMaxNodesLessThan(head, node:GetValue())
 
-	-- skip to n...
-	-- stitch 0 to n - 1...
+	for i = 0, node.n - 1 do
+		local prev = PrevNodes[i]
+
+		while prev.next[i] ~= node do
+			prev = prev.next[i]
+		end
+
+		prev.next[i] = node.next[i]
+	end
 end
 
+--- DOCME
 function M.RemoveValue (head, value)
-	local prev = FindMaxNodeBefore(head, value)
+    FindMaxNodesLessThan(head, value)
 
-	-- skip to n...
-	-- stitch 0 to n - 1...
+	--
+	local n, node = head.n
+
+	repeat
+		n, node = n - 1, PrevNodes[n - 1].next
+	until not (value < node.data) or n == 0
+
+	--
+	for i = 0, n - 1 do
+		PrevNodes[i].next = node.next[i]
+	end
+		
+	--
+	return node
 end
 
-function Node:GetNextNode ()
-	return self.next[0] -- if data < inf
+-- Node methods --
+local SkipListNode = {}
+
+--- DOCME
+function SkipListNode:GetNextNode ()
+	if self.next[0] ~= Inf then
+		return self.next[0]
+	else
+		return nil
+	end
 end
 
-function Node:GetValue ()
+--- DOCME
+function SkipListNode:GetValue ()
 	return self.data
 end
+
+--
+ffi.metatype(Node, { __index = SkipListNode })
+
+-- Export the module.
+return M
 
 --[[
 --
