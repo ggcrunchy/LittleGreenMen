@@ -135,6 +135,8 @@ local PackedUsage = ffi.typeof[[
 	Wipe data slice to `none` on acquire
 
 	Not sure about chunk size / descriptor bits
+
+	32 descriptors allows for a uint32 of flags, then each skip list covers 25 bits, or 32M
 ]]
 
 -- --

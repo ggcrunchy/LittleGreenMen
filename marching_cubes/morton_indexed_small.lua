@@ -184,7 +184,7 @@ function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
 		-- If necessary, allot the index's 128-element slice.
 		local lslot = band(rshift(morton, 5), 0x1F) -- Bits 5-9: slot in info table, in [0, 32)
 
-		if band(self.in_use[dslot], lshift(0xF, band(lslot, 0x1C))) == 0 then -- Round lslot down to multiple of 4; use to shift 4-bit mask into plaace
+		if band(self.in_use[dslot], lshift(0xF, band(lslot, 0x1C))) == 0 then -- Round lslot down to multiple of 4; use to shift 4-bit mask into place
 			-- On the first time, and after every 16th slice has been alloted, add a new
 			-- block; otherwise, continue to use the newest block. In either case, get the
 			-- sub-range corresponding to the current bin.

@@ -27,7 +27,8 @@
 local ffi = require("ffi")
 local gl = require("ffi/OpenGLES2")
 local sdl = require("ffi/sdl")
---[=[
+
+---[=[
 local sl = require("skip_list")
 
 local bb = ffi.typeof[[
@@ -51,20 +52,20 @@ local n = {}
 local k = {}
 
 for i = 1, 20 do
-	local x = math.random(10, 99)
+	local x = math.random(10, 98)
 	local v = bb(x, 1)
 	print("Inserting into A: {", v.comp, v.serial, "}")
 	n[#n+1] = a:InsertValue(v)
 	print("n = ", n[#n].n)
 	if i > 0 and i % 5 == 0 then
 		v.serial = math.random(2, 4)
-		print("Insert another withs serial", v.serial)
+		print("Insert another with serial", v.serial)
 		k[#k+1] = #n
 		n[#n+1] = a:InsertValue(v)
 	end
 end
 
-local sld = sl.NewType()
+local sld = sl.NewType(1 / 0, "double")
 local b = sld(5)
 local o = {}
 
@@ -167,7 +168,30 @@ for _ = 1, 3 do
 	print("")
 	a:RemoveValue(n[i].data)
 	Print(a)
+	table.remove(n, i)
 end
+
+print("")
+print("Insert or find values")
+
+print("")
+print("Adding new: ", 99, 6)
+
+local nv = bb(99, 6)
+a:InsertOrFindValue(nv)
+Print(a)
+
+print("")
+print("Trying to add dup of #9: ", n[9].data.comp, n[9].data.serial)
+local tdv = bb(n[9].data.comp, n[9].data.serial)
+a:InsertOrFindValue(tdv)
+Print(a)
+
+print("")
+print("Trying to add mod (to serial of 5) of #6: ", n[6].data.comp, n[6].data.serial)
+local tmv = bb(n[6].data.comp, 5)
+a:InsertOrFindValue(tmv)
+Print(a)
 
 print("")
 print("B")
@@ -183,7 +207,7 @@ while true do
 end
 
 print("")
-]=]
+--]=]
 -- Exports --
 local M = {}
 

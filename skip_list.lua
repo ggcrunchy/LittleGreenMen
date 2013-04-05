@@ -24,7 +24,9 @@
 --
 
 -- Standard library imports --
+local assert = assert
 local random = math.random
+local type = type
 
 -- Modules --
 local ffi = require("ffi")
@@ -52,38 +54,19 @@ local function FindMaxNodesLessThan (head, prev_nodes, value)
 	end
 end
 
--- --
-local DefType
-
 --- DOCME
-function M.NewType (inf)
-	-- --
-	local ct, def
+function M.NewType (inf, what)
+	assert(inf ~= nil, "Type needs 'infinite' element")
+	assert(type(inf) == "cdata" or type(what) == "string", "More info needed to build ct")
 
 	--
-	if inf ~= nil then
-		ct = ffi.typeof([[
-			struct {
-				int n;
-				$ data;
-				void * next[?];
-			}
-		]], inf)
-
-	--
-	elseif DefType then
-		return DefType
-
-	--
-	else
-		ct, inf, def = ffi.typeof[[
-			struct {
-				int n;
-				double data;
-				void * next[?];
-			}
-		]], 1 / 0, true
-	end
+	local ct = ffi.typeof([[
+		struct {
+			int n;
+			$ data;
+			void * next[?];
+		}
+	]], type(inf) == "cdata" and inf or ffi.typeof(what))
 
 	-- --
 	local SkipList = {}
@@ -135,11 +118,9 @@ function M.NewType (inf)
 	-- --
 	local prev_nodes
 
-	--- DOCME
-	function SkipList:InsertValue (value)
-		FindMaxNodesLessThan(self, prev_nodes, value)
-
-		local n = random(self.n)
+	--
+	local function AuxInsert (head, value)
+		local n = random(head.n)
 		local node = ct(n, n)
 
 		node.data = value
@@ -149,6 +130,24 @@ function M.NewType (inf)
 		end
 
 		return node
+	end
+
+	--- DOCME
+	function SkipList:InsertOrFindValue (value)
+		FindMaxNodesLessThan(self, prev_nodes, value)
+
+		if not (value < cast(pct, prev_nodes[0].next[0]).data) then
+			return cast(pct, prev_nodes[0].next[0])
+		else
+			return AuxInsert(self, value)
+		end
+	end
+
+	--- DOCME
+	function SkipList:InsertValue (value)
+		FindMaxNodesLessThan(self, prev_nodes, value)
+
+		return AuxInsert(self, value)
 	end
 
 -- IsFinalNode -- return cast(pct, self.next[0]).n == 0
@@ -188,7 +187,7 @@ function M.NewType (inf)
 		for i = 0, node.n - 1 do
 			prev_nodes[i].next[i] = node.next[i]
 		end
-	
+
 		--
 		return node
 	end
@@ -221,10 +220,6 @@ function M.NewType (inf)
 		end
 
 		return head
-	end
-
-	if def then
-		DefType = NewList
 	end
 
 	return NewList
