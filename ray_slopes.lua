@@ -162,7 +162,7 @@ function M.MakeRay (x, y, z, i, j, k)
 				ray.classification = "MMP"
 			else
 				ray.classification = "MMO"
-            end
+			end
 		else -- j >= 0
 			if k < 0 then
 				ray.classification = j == 0 and "MOM" or "MPM"
@@ -193,7 +193,7 @@ function M.MakeRay (x, y, z, i, j, k)
 					ray.classification = "PMP"
 				end
 			end
-        else -- j >= 0
+		else -- j >= 0
 			if k < 0 then
 				if i == 0 and j == 0 then
 					ray.classification = "OOM"
@@ -258,7 +258,7 @@ end
 	-- away the "encode" and "get time" operations. (This holds likewise for groups 2-7.)
 
 	-- All of the expressions are inequalities, A < B or A > B. The test is all or nothing:
-	-- EVERY expression must fail. This suggests aggregating the results into a bit pattern
+	-- EVERY expression must fail*. This suggests aggregating the results into a bit pattern
 	-- that can be quickly compared against a reference pattern.
 
 	-- Since the x, y, z indices are already on hand, they may as well be extracted from the
@@ -267,7 +267,7 @@ end
 
 	-- An examination of the first line shows that each "0" value belongs to an "A < value"
 	-- expression, whereas "1" values belong to "A > value". Turning this around, A < B must
-	-- yield 0 on failure, and 1 for A < B. This policy is generalized to all expressions**.
+	-- yield 0 on failure, and 1 for A > B. This policy is generalized to all expressions**.
 
 	-- Given all of this, the various constants are derived in the following. Note that bits
 	-- are enumerated last-to-first; the final binary string (before its hex equivalent) is
