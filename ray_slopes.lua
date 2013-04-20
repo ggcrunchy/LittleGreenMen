@@ -203,7 +203,6 @@ function M.MakeRay (x, y, z, i, j, k)
 					ray.classification = "POM"
 				else
 					ray.classification = "PPM"
-					ray.info = ls(0x0C3, 1)
 				end
 			else -- k >= 0
 				if i == 0 then
@@ -222,7 +221,7 @@ function M.MakeRay (x, y, z, i, j, k)
 					elseif k == 0 then
 						ray.classification = "PPO"
 					else
-                        ray.classification = "PPP"
+						ray.classification = "PPP"
 					end
 				end
 			end

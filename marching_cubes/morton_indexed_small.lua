@@ -217,7 +217,7 @@ function MarchingCubes_MortonIndexedSmall:Set (x, y, z, value)
 		local uslot = rshift(ioffset, 5) -- Bits 5-6: Sub-offset into slice usage, in [0, 4)
 		local block, bin = BlockBin(self.id, self.info[dslot][rshift(lslot, 2)])
 
-		block.used[bin][uslot] = bor(block.used[bin][uslot], lshift(1, band(morton, 0x1F))) -- Bits 0-4: Offset into slice usage, in [0, 32)
+		block.used[bin][uslot] = bor(block.used[bin][uslot], lshift(1, morton)) -- Bits 0-4: Offset into slice usage, in [0, 32)
 		block.values[bin][ioffset] = value -- bin * 128 + offset
 	end
 end
@@ -234,7 +234,7 @@ local function SetCorner (mcp, cell, ci, i, j, k, index)
 	if band(mcp.in_use[dslot], lshift(1, lslot)) ~= 0 then
 		local block, bin = BlockBin(mcp.id, mcp.info[dslot][rshift(lslot, 2)])
 
-		if band(block.used[bin][band(lslot, 0x3)], lshift(1, band(index, 0x1F))) ~= 0 then
+		if band(block.used[bin][band(lslot, 0x3)], lshift(1, index)) ~= 0 then
 			SetCellCornerValue(cell, ci, block.values[bin][band(index, 0x7F)])
 		end
 	end
