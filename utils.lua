@@ -93,31 +93,6 @@ r = MultiplyDeBruijnBitPosition2[(uint32_t)(v * 0x077CB531U) >> 27];
 
 end
 
---[[
-TODO: Put in ome unit testing area?
-
-local function MortonNaive (x, y, z)
-	local result = 0
-
-	for i = 0, 9 do
-		local mask = lshift(1, i)
-		local xm = band(x, mask)
-		local ym = band(y, mask)
-		local zm = band(z, mask)
-
-		-- i(x) = i * 3 + 0
-		-- i(y) = i * 3 + 1
-		-- i(z) = i * 3 + 2
-		-- shift(flag) = i * 3 + K - i = i * (3 - 1) + K = i * 2 + K
-		local i0 = i * 2
-
-		result = bor(result, lshift(xm, i0), lshift(ym, i0 + 1), lshift(zm, i0 + 2))
-	end
-
-	return result
-end
-]]
-
 --
 local function AuxTriple (mnum)
 	mnum = band(0x24924924, mnum)

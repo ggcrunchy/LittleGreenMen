@@ -89,11 +89,6 @@ local Grads3 = ffi.new("const double[12][3]",
 	{ 0, 1, 1 }, { 0, -1, 1 }, { 0, 1, -1 }, { 0, -1, -1 }
 )
 
--- For testing, uncomment these:
-  -- local t1 = os.clock() -- For total time
-  -- local C, Cmin, Cmax -- Return value scalar
-  -- function printf (s, ...) print(string.format(s, ...)) end
-
 do
 	-- 2D weight contribution
 	local function GetN (bx, by, x, y)
@@ -147,45 +142,6 @@ do
 		-- The result is scaled to return values in the interval [-1,1].
 		return 70.1480580019 * (n0 + n1 + n2)
 	end
---[[
-	-- Timing test, 2D case
-	local S = M.Simplex2D
-	local mmin, mmax = math.min, math.max
-	local fmin, fmax = 10000, -10000
-	local v = require("jit.dump")
-	local t1 = os.clock()
--- v.start("tisH", "SOME_DIRECTORY/Simplex2D.html")	-- Customize this
---[=[
-	for k = 1, 500 do
-		local fmin2, fmax2 = fmin, fmax
-		fmin, fmax = 10000, -10000
-		C = 83 + k * .006 -- Subtitute C for constant on return line above
---]=]
-	for i = -2500, 2500 do
-		for j = -2500, 2500 do
-			local f = S(i + .5, j + .3)
-			fmin = mmin(fmin, f)
-			fmax = mmax(fmax, f)
-		end
-	end
---[=[
-		if fmin < fmin2 and fmin >= -1 then
-			Cmin = C
-		else
-			fmin = fmin2
-		end
-
-		if fmax > fmax2 and fmax <= 1 then
-			Cmax = C
-		else
-			fmax = fmax2
-		end
-	end
-	printf("Simplex2D: min = %f, max = %f, Cmin = %f, Cmax = %f", fmin, fmax, Cmin, Cmax)
---]=]
--- v.off()
-	printf("Simplex2D: time / call = %.9f, min = %f, max = %f", (os.clock() - t1) / (5001 * 5001), fmin, fmax)
---]]
 end
 
 do
@@ -271,47 +227,6 @@ do
 		-- The result is scaled to stay just inside [-1,1]
 		return 28.452842 * (n0 + n1 + n2 + n3)
 	end
---[[
-	-- Timing test, 3D case
-	local S = M.Simplex3D
-	local mmin, mmax = math.min, math.max
-	local fmin, fmax = 10000, -10000
-	local v = require("jit.dump")
-	local t1 = os.clock()
--- v.start("tisH", "SOME_DIRECTORY/Simplex3D.html")	-- Customize this
---[=[
-	for l = 1, 500 do
-		local fmin2, fmax2 = fmin, fmax
-		fmin, fmax = 10000, -10000
-		C = 33 + l * .002 -- Subtitute C for constant on return line above
---]=]
-	for i = -50, 50 do
-		for j = -50, 50 do
-			for k = -50, 50 do
-				local f = S(i + .5, j + .4, k + .1)
-				fmin = mmin(fmin, f)
-				fmax = mmax(fmax, f)
-			end
-		end
-	end
---[=[
-		if fmin < fmin2 and fmin >= -1 then
-			Cmin = C
-		else
-			fmin = fmin2
-		end
-
-		if fmax > fmax2 and fmax <= 1 then
-			Cmax = C
-		else
-			fmax = fmax2
-		end
-	end
-	printf("Simplex3D: min = %f, max = %f, Cmin = %f, Cmax = %f", fmin, fmax, Cmin, Cmax)
---]=]
--- v.off()
-	printf("Simplex3D: time / call = %.9f, min = %f, max = %f", (os.clock() - t1) / (101 * 101 * 101), fmin, fmax)
---]]
 end
 
 do
@@ -434,92 +349,7 @@ do
 
 		return 2.210600293 * (n0 + n1 + n2 + n3 + n4)
 	end
-
---[[
-	-- Timing test, 4D case
-	local S = M.Simplex4D
-	local mmin, mmax = math.min, math.max
-	local fmin, fmax = 10000, -10000
-	local v = require("jit.dump")
-	local t1 = os.clock()
--- v.start("tisH", "SOME_DIRECTORY/Simplex4D.html")
---[=[
-	for m = 1, 500 do
-		local fmin2, fmax2 = fmin, fmax
-		fmin, fmax = 10000, -10000
-		C = 40 + m * .006 -- Subtitute C for constant on return line above
---]=]
-	for i = -25, 25 do
-		for j = -25, 25 do
-			for k = -25, 25 do
-				for l = -25, 25 do
-					local f = S(i + .5, j + .4, k + .1, l + .7)
-					fmin = mmin(fmin, f)
-					fmax = mmax(fmax, f)
-				end
-			end
-		end
-	end
---[=[
-		if fmin < fmin2 and fmin >= -1 then
-			Cmin = C
-		else
-			fmin = fmin2
-		end
-
-		if fmax > fmax2 and fmax <= 1 then
-			Cmax = C
-		else
-			fmax = fmax2
-		end
-	end
-	printf("Simplex4D: min = %f, max = %f, Cmin = %f, Cmax = %f", fmin, fmax, Cmin, Cmax)
---]=]
--- v.off()
-	printf("Simplex4D: time / call = %.9f, min = %f, max = %f", (os.clock() - t1) / (51 * 51 * 51 * 51), fmin, fmax)
---]]
 end
-
--- For testing, uncomment this:
-  -- printf("%.9f", os.clock() - t1) -- Total test time
-
---[=[
--- Customize as needed to dump values to a file, e.g. to compare against other implementations:
-local F = io.open("SOME_DIRECTORY/LuaOut.txt", "w")
-if F then
---[[
-	for i = 1, 50 do
-		for j = 1, 50 do
-			local f = M.Simplex2D(i + .5, j + .3)
-			F:write(string.format("(%i, %i): %f\n", i, j, f))
-		end
-	end
---]]
---[[
-	for i = -1, -50, -1 do
-		for j = -1, -50, -1 do
-			for k = -1, -50, -1 do
-				local f = M.Simplex3D(i + .5, j + .4, k + .1)
-				F:write(string.format("(%i, %i, %i): %f\n", i, j, k, f))
-			end
-		end
-	end
---]]
---[[
-	for i = -1, -50, -1 do
-		for j = -1, -50, -1 do
-			for k = -1, -50, -1 do
-				for l = -1, -50, -1 do
-					local f = M.Simplex4D(i + .5, j + .4, k + .1, l + .7)
-					F:write(string.format("(%i, %i, %i, %i): %f\n", i, j, k, l, f))
-				end
-			end
-		end
-	end
---]]
-	F:close()
-end
---]=]
 
 -- Export the module.
 return M
